@@ -1,0 +1,73 @@
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%
+%   File          : proposal-template.tex
+%   Author(s)     : William Enck <enck@cse.psu.edu>
+%   Description   : Template for CSC574 Project Proposal
+%
+%   Last Modified : Wed Aug 31 08:26:14 EDT 2011
+%   By            : William Enck <enck@cs.ncsu.edu>
+%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\documentclass[11pt,pdftex]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{comment}
+\usepackage{graphicx}
+\usepackage{url}
+\usepackage[pdftex,colorlinks=true,citecolor=black,filecolor=black,%
+            linkcolor=black,urlcolor=black]{hyperref}
+\usepackage{times}
+%\usepackage{listings}
+%\usepackage{fancyvrb}
+%\usepackage{amsmath}
+%\usepackage{amsthm}
+%\usepackage{amssymb}
+
+\title{CSC574 -- Fall 2011 -- Experiment Proposal}
+\author{Jane Doe and John Smith \\
+\url{{jdoe,jsmith}@ncsu.edu}
+}
+\date{October 24, 2011}
+
+\begin{document}
+
+\maketitle
+
+\section{Problem/Solution Overview}
+Offloading infrastructure to IaaS providers has come a long way. More and more webservices are deploying to cheaply and easily scalable IaaS providers like Amazon. Even with this trend, security of data on the cloud is a problem. Amazon recommends clients to encrypt their data. A significant chunk of applications haven't yet moved to the cloud because of lack of trust in security of their data in the cloud. We will be addressing this problem in our project. We will concentrate on static aspects of security and leave out the dynamic ones.
+
+Solution overview:
+We plan to use the following technologies for our project: \\
+1) TPM emulator by BerliOS (\url{http://tpm-emulator.berlios.de/}) \\
+2) KVM (\url{http://www.linux-kvm.org/page/Main_Page}) \\
+
+In reality, there would be a real TPM (Trusted Platform Module) which will check the integrity of BIOS and the VMM. We use a simulator as a proof of concept. The TPM will act as the root of trust. We extend the root of trust to the launcher by verifying it via a TPM before launch. The launcher can then unlock the key to decrypt the SSL certificate to be used to authenticate with the client. The launcher will then take the decryption key from the client over an encrypted and mutually authenticated SSL connection. This key will be used to decrypt the kernel into memory and hence, boot the virtual image.
+
+The kernel will derive the decryption key for the data using some mechanism <fill-in-the-blanks>. 
+
+
+\section{Methodology}
+We identified the following requirements for the security of data at the cloud provider:
+1) Data should be stored encrypted and the encryption keys must be received from the client via a trusted program. This is essential, since if the cloud provider is compromised, decryption of the data should be infeasible.
+2) It shouldn't be possible to boot the virtual machine image by an untrusted application. To make this possible, the kernel image is encrypted and can only be decrypted by the launcher in the VMM. The Launcher itself is protected by a TPM. 
+
+Intuition of security:
+The root of trust is the TPM. Using TPM, trust can be extended to the BIOS, VMM and the launcher application in the VMM (Launcher is any binary which launches a guest VM on behalf of the VMM). The Launcher setups an SSL connection with the client (mutual authentication) and the client sends over the decryption key for the kernel over SSL. The launcher decrypts the kernel into memory and kicks off the VM. 
+
+
+The TPM simulator provided by BerliOS exposes a device (/dev/tpm) much like a real TPM would. We use the tpm\_tools package to interface with this TPM device. The TPM would contain the hash of the kvm launcher binary - qemu-kvm. Thus, no one can rig this binary, else the TPM won't allow its execution. 
+
+Once we trust the launcher, the launcher will initiate an SSL connection with the client and do a mutual authentication. Once the launcher has been authenticated, the client will send over the key to decrypt the kernel image. The launcher will then decrypt the kernel image and continue with its usual processing.
+
+The kernel will obtain the key for decryption to be used to decrypt the actual data. <fill-the-blanks-here>
+
+\section{Experiment Hypotheses}
+
+\subsection{Hypothesis 1}
+\subsection{Hypothesis 2}
+\subsection{Hypothesis 3}
+... and so on
+
+\end{document}
+
+
