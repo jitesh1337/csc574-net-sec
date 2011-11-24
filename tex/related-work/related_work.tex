@@ -1,0 +1,76 @@
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%
+%   File          : related_work.tex
+%   Author(s)     : Ashwin Shashidharan <ashashi3@ncsu.edu> and Jitesh Shah <jhshah@ncsu.edu>
+%   Description   : Related Work for the Project
+%
+%   Last Modified : Wed Sep 28 21:30:30 EDT 2011
+%   By            :  Ashwin Shashidharan <ashashi3@ncsu.edu> and Jitesh Shah <jhshah@ncsu.edu>
+%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\documentclass[10pt,twocolumn,pdftex]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{comment}
+\usepackage{ifthen}
+\usepackage{graphicx}
+\usepackage[hyphens]{url}
+\usepackage{times}
+% hyperref sometimes causes strange build errors. Comment if problems
+\usepackage[pdftex,colorlinks=true,citecolor=black,filecolor=black,%
+            linkcolor=black,urlcolor=black]{hyperref}
+%\usepackage{listings}
+%\usepackage{fancyvrb}
+%\usepackage{amsmath}
+%\usepackage{amsthm}
+%\usepackage{amssymb}
+
+% Some quick utils
+% Use:
+% \begin{itemize} \itembase{3pt}
+%  \item ...
+% \end {itemize}
+\newcommand{\itembase}[1]{\setlength{\itemsep}{#1}}
+
+\title{Offloading encryption/decryption of data/image to the cloud}
+\author{Ashwin Shashidharan and Jitesh Shah \\
+\url{{ashashi3,jhshah}@ncsu.edu}
+}
+\date{September 28, 2011}
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+Cloud computing has emerged into a very popular \cite{adoption-survey} means of scaling up quickly without the associated infrastructure costs. The promise is complete freedom from maintaining own server infrastructures and moving to third-party infrastructure providers. For the cloud to be feasible, it is important for the clients to be able to verify that the image they are booting into isn't tampered with and that their data is safe in the cloud. If the cloud provider is not to be trusted with sensitive data, this means that the virtual image needs to be encrypted and the key stored with the client rather than the cloud provider. Also, the data in the cloud needs to be encrypted. We intend to address this problem using SSL to authenticate the server and then establishing a secure channel to exchange keys for decrypting the virtual image and a different key to secure any sensitive data. The final result is offloading encryption/decryption to the cloud rather than doing it on the client-side. As far as the implementation goes, our initial plan is to use Xen \cite{Barham:2003:XAV:945445.945462} to come up with a proof of concept.
+\end{abstract}
+
+\newpage
+\mbox{}
+\newpage
+\section*{Related work}
+VM images are more often than not stored and booted by the cloud provider.  Thereby, arises one of the first security requirements in a cloud, customer ability to verify and trust their own image. Yet another major problem is that of security of sensitive data. It is issues like these and others that have mostly been grounds for distrust and slow adoption of cloud computing. Amazon, one of the biggest IaaS providers, themselves recommend customers to use client side encryption to secure their data \cite{Amazon-web-services} Also none of these providers have worked towards providing a strong guarantee of trusted boot. These and additional requirements of a trusted cloud platform have been well-summarized in \cite{Schiffman:2010:SCT:1866835.1866843}. The solution to the problem is two-fold: Trusted boot and Data encryption.
+
+Trusted boot has been discussed in literature since long. One such article outlines a trusted boot method for standalone IBM machines using PKI that successively verifies each component before transferring control over to it \cite{Arbaugh:1997:SRB:882493.884371}. There has also work been done exploring the use of a co-processor to verify each system block as it loads\cite{Tygar91dyad:a}. While the former approach requires significant firmware modifications, the latter involves re-designing hardware. These concepts though provide security; they are difficult to put in to practice in a virtualized environment.
+
+Alternatives like Trusted Platform Module (TPM) \cite{tcg} based solutions have explored widely in papers\cite{Santos09towardstrusted, Garfinkel03terra:a, Haldar04semanticremote, Garfinkel03flexibleos}. There also exist implementations that use TPM to create a TVMM (Trusted VMM), used as the root of trust  \cite{Santos09towardstrusted}. TPMs are separately added hardware modules and offer higher security. TVMM's have also been virtualised for use by guest operating systems and discussed earlier \cite{Berger:2006:VVT:1267336.1267357}. The Trusted Computing Group (TCG) has also come up with a secure alternative to BIOS called UEFI (Unified Extensible Firmware interface)\cite{Intel-UEFI}. The primary goal of UEFI is secure boot i.e., to allow booting only signed boot-loader/OS. Even with these approaches no one can really stop a cracker to boot a virtual image if he manages to break into the cloud provider's servers. TPM only assures us of an image which has not been tampered. Our work outlines a need for an encrypted kernel using a key provided by the customer on-demand. Furthermore, any process that enables this feature can include TPMs for it's verification.
+
+Run-time Integrity verification is another aspect. All approaches outlined above only perform static verification. There has been related work \cite{10.1109/ACSAC.2009.18, Sailer:2004:DIT:1251375.1251391, 10.1109/SRDS.2006.41, Shankar06towardautomated} that discuss the run-time requirements conforming to Clark-Wilson's integrity model \cite{10.1109/SP.1987.10001}. Also a method \cite{Berger:2006:VVT:1267336.1267357} to use TVMMs to build run-time integrity mechanism has been discussed before. However, we leave out run-time integrity since it is beyond the scope of our project. 
+
+Policy based decisions to continue or terminate a connection is particularly useful to clients to establish integrity of the communication endpoint in the cloud. TLS[5] is the most widely used technology for securing a transmission channel to its endpoints. In conjunction with Trusted Computing technology, the TLS protocol in recent years has seen enhancements allowing peers on endpoints to decide on changes in connection \cite{Gasmi:2007:BSC:1314354.1314363}. 
+
+Also, besides securing the channel, the user must be able to trust an application in the cloud. Owing to the trusted computing initiative there has been increasing research in attestation systems \cite{springerlink:10.1007/s10207-011-0124-7} and their use in verification of application integrity. With a combination of transport layer security, these schemes can be effectively used for appraisal of remote applications in the cloud. The applications may also continue to enforce standard OS implemented policies like SELinux for authorized use \cite{Loscocco:2001:IFS:647054.715771}. With closely coupled security architecture features and strict applications policies, systems may be configured to prevent unauthorized access \cite{citeulike:2402639}. Besides, Distributed Mandatory Access Control policies based on reference monitors \cite{4041151} have adequately addressed policy issues pertaining to distributed machines applicable in a cloud.
+
+The advent of cloud storage also has seen increased research in non-standard cryptographic primitives and architectures. The driving force behind such research can be attributed to users craving for storage infrastructure without having to trust the provider \cite{Kamara:2010:CCS:1894863.1894876}. Cryptographic techniques typically introduce additional computation which could render securing data in its lifetime as impractical. To search and retrieve encrypted data, techniques involving encrypted indexes have been devised \cite{848445}. For other instances where data integrity in the cloud is more significant than confidentiality, there has been work to verify stored data at the data storage itself \cite{Erway:2009:DPD:1653662.1653688, Ateniese:2007:PDP:1315245.1315318}. There has also been gaining popularity for work on disk encryption \cite{Fruhwirth05newmethods} like LUKS, Bit-Locker \cite{Ferguson06aes-cbc+}, TrueCrypt[11] but, primarily for operating systems which can encrypt an entire partition or storage device. Another approach to building the user’s trust extends conventional key management systems for data encryption on cloud storage \cite{Shin_Kobara_2010}. 
+
+It must be noted that a rigorous security policy for physically protecting computing elements in the cloud is likewise of no less importance. Hardware based attacks on disk encryption systems for analyzing memory content have also been discussed before and is not an entirely new area\cite{Halderman:2009:LWR:1506409.1506429}.
+
+In conclusion, appropriate confidence building measures are necessary to gain a cloud user's trust without which cloud providers shall remain unsuccessful in alleviating user's fears about security in the cloud \cite{5632337}.
+\newpage
+\nocite{*}
+
+\bibliography{references}{}
+\bibliographystyle{plain}
+\end{document}
+
+
