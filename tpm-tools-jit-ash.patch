@@ -1,0 +1,105 @@
+Only in tpm-tools-1.3.5: config.h
+Only in tpm-tools-1.3.5: config.log
+Only in tpm-tools-1.3.5: config.status
+diff -dur tpm-tools-1.3.5/configure tpm-tools-1.3.5.modified/configure
+--- tpm-tools-1.3.5/configure	2010-02-01 15:59:27.000000000 -0500
++++ tpm-tools-1.3.5.modified/configure	2011-11-30 16:46:56.570255638 -0500
+@@ -14963,7 +14963,7 @@
+ fi
+ 
+ 
+-CFLAGS="$CFLAGS -Wall -Werror -Wreturn-type -Wsign-compare"
++CFLAGS="$CFLAGS -Wall -Wreturn-type -Wsign-compare"
+ 
+ ac_config_files="$ac_config_files ./Makefile po/Makefile.in m4/Makefile include/Makefile lib/Makefile src/Makefile src/tpm_mgmt/Makefile src/cmds/Makefile src/data_mgmt/Makefile dist/tpm-tools.spec man/Makefile man/man1/Makefile man/man3/Makefile man/man8/Makefile"
+ 
+diff -dur tpm-tools-1.3.5/configure.in tpm-tools-1.3.5.modified/configure.in
+--- tpm-tools-1.3.5/configure.in	2010-02-01 15:58:29.000000000 -0500
++++ tpm-tools-1.3.5.modified/configure.in	2011-11-30 16:46:45.996551448 -0500
+@@ -138,7 +138,7 @@
+ AC_TYPE_SIGNAL
+ AC_TYPE_UID_T
+ 
+-CFLAGS="$CFLAGS -Wall -Werror -Wreturn-type -Wsign-compare"
++CFLAGS="$CFLAGS -Wall -Wreturn-type -Wsign-compare"
+ 
+ AC_CONFIG_FILES(./Makefile		\
+ 		po/Makefile.in		\
+Only in tpm-tools-1.3.5/dist: tpm-tools.spec
+Only in tpm-tools-1.3.5/include: Makefile
+diff -dur tpm-tools-1.3.5/include/tpm_unseal.h tpm-tools-1.3.5.modified/include/tpm_unseal.h
+--- tpm-tools-1.3.5/include/tpm_unseal.h	2009-10-28 16:36:14.000000000 -0400
++++ tpm-tools-1.3.5.modified/include/tpm_unseal.h	2011-11-30 16:41:08.997975925 -0500
+@@ -37,7 +37,7 @@
+ 
+ extern int tpm_errno;
+ 
+-int tpmUnsealFile(char*, unsigned char**, int*, BOOL);
++int tpmUnsealFile(char*, unsigned char**, int*, BOOL, unsigned char *);
+ void tpmUnsealShred(unsigned char*, int);
+ char* tpmUnsealStrerror(int);
+ 
+Only in tpm-tools-1.3.5/lib: .libs
+Only in tpm-tools-1.3.5/lib: Makefile
+Only in tpm-tools-1.3.5/lib: tpm_tspi.lo
+Only in tpm-tools-1.3.5/lib: tpm_tspi.o
+diff -dur tpm-tools-1.3.5/lib/tpm_unseal.c tpm-tools-1.3.5.modified/lib/tpm_unseal.c
+--- tpm-tools-1.3.5/lib/tpm_unseal.c	2010-02-01 11:52:25.000000000 -0500
++++ tpm-tools-1.3.5.modified/lib/tpm_unseal.c	2011-11-30 16:40:46.727598487 -0500
+@@ -66,7 +66,7 @@
+ int tpm_errno;
+ 
+ int tpmUnsealFile( char* fname, unsigned char** tss_data, int* tss_size, 
+-		   BOOL srkWellKnown ) {
++		   BOOL srkWellKnown, unsigned char *srk_passwd ) {
+ 
+ 	int rc, rcLen=0, tssLen=0, evpLen=0;
+ 	BYTE* rcPtr;
+@@ -280,10 +280,15 @@
+ 	}
+ 
+ 	if (!srkWellKnown) {
+-		/* Prompt for SRK password */
+-		srkSecret = GETPASSWD(_("Enter SRK password: "), &srkSecretLen, FALSE);
+-		if (!srkSecret)
+-			goto out;
++		if (srk_passwd == NULL) {
++			/* Prompt for SRK password */
++			srkSecret = GETPASSWD(_("Enter SRK password: "), &srkSecretLen, FALSE);
++			if (!srkSecret)
++				goto out;
++		} else {
++			srkSecret = srk_passwd;
++			srkSecretLen = strlen(srkSecret);
++		}
+ 	}
+ 	if ((rc=Tspi_Context_Connect(hContext, NULL)) != TSS_SUCCESS) {
+ 		tpm_errno = ETSPICTXCNCT;
+Only in tpm-tools-1.3.5: libtool
+Only in tpm-tools-1.3.5/m4: Makefile
+Only in tpm-tools-1.3.5: Makefile
+Only in tpm-tools-1.3.5/man: Makefile
+Only in tpm-tools-1.3.5/man/man1: Makefile
+Only in tpm-tools-1.3.5/man/man3: Makefile
+Only in tpm-tools-1.3.5/man/man8: Makefile
+Only in tpm-tools-1.3.5/po: Makefile
+Only in tpm-tools-1.3.5/po: Makefile.in
+Only in tpm-tools-1.3.5/po: POTFILES
+Only in tpm-tools-1.3.5/src/cmds: Makefile
+diff -dur tpm-tools-1.3.5/src/cmds/tpm_unsealdata.c tpm-tools-1.3.5.modified/src/cmds/tpm_unsealdata.c
+--- tpm-tools-1.3.5/src/cmds/tpm_unsealdata.c	2009-10-28 16:36:14.000000000 -0400
++++ tpm-tools-1.3.5.modified/src/cmds/tpm_unsealdata.c	2011-11-30 16:38:51.157828677 -0500
+@@ -85,7 +85,7 @@
+ 			      help) != 0)
+ 		return rc;
+ 	
+-	rc = tpmUnsealFile(in_filename, &tss_data, &tss_size, srkWellKnown);
++	rc = tpmUnsealFile(in_filename, &tss_data, &tss_size, srkWellKnown, NULL);
+ 
+ 	if (strlen(out_filename) == 0) {
+ 		for (i=0; i < tss_size; i++)
+Only in tpm-tools-1.3.5/src/data_mgmt: Makefile
+Only in tpm-tools-1.3.5/src: Makefile
+Only in tpm-tools-1.3.5/src/tpm_mgmt: Makefile
+Only in tpm-tools-1.3.5: stamp-h1
+Only in tpm-tools-1.3.5.modified/: tags
