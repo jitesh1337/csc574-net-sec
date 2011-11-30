@@ -4,7 +4,7 @@ kernel_part:	kernel_part.c
 	gcc $< -o $@ -ltspi -Wall -lcrypto
 
 secure_daemon:	secure_daemon.c
-	gcc $< -o $@
+	gcc $< -o $@ -lcrypto
 	
 trigger_emulator:	trigger_emulator.c
 	gcc $< -o $@

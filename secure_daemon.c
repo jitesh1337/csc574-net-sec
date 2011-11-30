@@ -5,14 +5,48 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/un.h>
+#include <unistd.h>
+#include <openssl/sha.h>
+#include <sys/utsname.h>
+#include <sys/stat.h>
+#include <fcntl.h>
 
 #define SOCK_PATH "secure_socket"
 
+unsigned char original_launcher_sha1[] = {0x27, 0x9b, 0xd7, 0xaa, 0x13, 0xaf, 0x12, 0x38, 0x11, 0x26, 0xc9, 0xec, 0x76, 0x4c, 0x1a, 0xb0, 0x50, 0xe0, 0x27, 0x6c};
+
+/* Get filename, return its hash. Use openssl's SHA1
+ */
+int get_hash(char *filename, unsigned char *sha1)
+{
+	int rc, fd;
+	struct stat stat_buf;
+	unsigned char *buf;
+
+	rc = stat(filename, &stat_buf);
+	if (rc != 0) {
+		printf("Can't stat %s\n", filename);
+		return -1;
+	}
+
+	buf = malloc(stat_buf.st_size);
+	fd = open(filename, O_RDONLY);
+	read(fd, buf, stat_buf.st_size);
+	close(fd);
+	
+	SHA1(buf, stat_buf.st_size, sha1);
+	free(buf);
+	return 0;
+}
+
 int main(void)
 {
-	int sock, s2, t, len;
+	int sock, s2, t, len, rc;
 	struct sockaddr_un local, remote;
 	char str[1024];
+	unsigned char sha1[20];
+	char *args, *secret;
+	pid_t pid;
 
 	if ((sock = socket(AF_UNIX, SOCK_STREAM, 0)) == -1) {
 		fprintf(stderr, "Error: Socket create failed\n");
@@ -41,14 +75,34 @@ int main(void)
 			exit(1);
 		}
 
-		n = recv(s2, str, 1024, 0);
+		n = recv(s2, str, 1023, 0);
 		if (n < 0)
 			fprintf(stderr, "Error: recv failed\n");
 		str[n] = '\0';
-
 		printf("Received: %s", str);
 
 		close(s2);
+
+		/* Hash of the launcher */
+		rc = get_hash("/usr/bin/qemu-system-x86_64", sha1);
+		if (rc != 0)
+			return rc;
+
+		if (memcmp(sha1, original_launcher_sha1, 20) != 0) {
+			printf("Hash mismatch\n");
+			//continue;
+		}
+		
+		args = strtok(str, ";");
+		secret = strtok(NULL, "; \n\t");
+
+		pid = fork();
+		if (pid == 0) { /* child */
+			printf("Will fork: %s %s\n", "/usr/bin/qemu-system-x86_64", args);
+			execl("/usr/bin/qemu-system-x86_64", args, NULL);
+		} else
+			continue;
+
 	}
 
 	close(sock);

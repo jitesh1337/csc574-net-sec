@@ -26,6 +26,7 @@ int get_hash(char *filename, unsigned char *sha1)
 	close(fd);
 	
 	SHA1(buf, stat_buf.st_size, sha1);
+	free(buf);
 	return 0;
 }
 
@@ -94,17 +95,6 @@ int main(int argc, char *argv[])
 		printf("Kernel Extend failed : %d\n", rc);
 	}
 
-	/* Hash of the launcher */
-	rc = get_hash(argv[1], sha1);
-	if (rc != 0)
-		return rc;
-
-	/* Extend PCR#16 with hash of the launcher */
-	rc = Tspi_TPM_PcrExtend(hTPM, 16, 20, sha1, NULL, 
-			&pcr_len, &pcr_value);
-	if (rc != TSS_SUCCESS) {
-		printf("Executable Extend failed : %d\n", rc);
-	}
 
 	printf("Length of extended PCR value: %d\n", pcr_len);
 	for (i = 0; i < pcr_len; i++)
