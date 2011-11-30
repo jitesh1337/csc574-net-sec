@@ -95,6 +95,17 @@ int main(int argc, char *argv[])
 		printf("Kernel Extend failed : %d\n", rc);
 	}
 
+	/*
+	rc = get_hash(argv[1], sha1);
+	if (rc != 0)
+		exit(1);
+
+
+	rc = Tspi_TPM_PcrExtend(hTPM, 16, 20, sha1, NULL, 
+			&pcr_len, &pcr_value);
+	if (rc != TSS_SUCCESS) {
+		printf("Secure Daemon Extend failed : %d\n", rc);
+	} */
 
 	printf("Length of extended PCR value: %d\n", pcr_len);
 	for (i = 0; i < pcr_len; i++)
