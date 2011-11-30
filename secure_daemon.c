@@ -10,8 +10,10 @@
 #include <sys/utsname.h>
 #include <sys/stat.h>
 #include <fcntl.h>
+#include <libgen.h>
 
 #define SOCK_PATH "secure_socket"
+#define	MAX_ARGS	128
 
 unsigned char original_launcher_sha1[] = {0x27, 0x9b, 0xd7, 0xaa, 0x13, 0xaf, 0x12, 0x38, 0x11, 0x26, 0xc9, 0xec, 0x76, 0x4c, 0x1a, 0xb0, 0x50, 0xe0, 0x27, 0x6c};
 
@@ -39,6 +41,22 @@ int get_hash(char *filename, unsigned char *sha1)
 	return 0;
 }
 
+void split_args(char *command, char *args, char *qemu_argv[MAX_ARGS])
+{
+	int i;
+	char *arg;
+
+	qemu_argv[0] = basename(command);
+	arg = strtok(args, " \n\t");
+	for(i = 1; i < MAX_ARGS - 1; i++) {
+		if (arg == NULL)
+			break;
+		qemu_argv[i] = arg;
+		arg = strtok(NULL, " \n\t");
+	}
+	qemu_argv[i] = NULL;
+}
+
 int main(void)
 {
 	int sock, s2, t, len, rc;
@@ -46,6 +64,7 @@ int main(void)
 	char str[1024];
 	unsigned char sha1[20];
 	char *args, *secret;
+	char *qemu_argv[MAX_ARGS];
 	pid_t pid;
 
 	if ((sock = socket(AF_UNIX, SOCK_STREAM, 0)) == -1) {
@@ -89,17 +108,17 @@ int main(void)
 			return rc;
 
 		if (memcmp(sha1, original_launcher_sha1, 20) != 0) {
-			printf("Hash mismatch\n");
+			fprintf(stderr, "Error: Hash mismatch\n");
 			//continue;
 		}
 		
 		args = strtok(str, ";");
 		secret = strtok(NULL, "; \n\t");
 
+		split_args("/usr/bin/qemu-system-x86_64", args, qemu_argv);
 		pid = fork();
 		if (pid == 0) { /* child */
-			printf("Will fork: %s %s\n", "/usr/bin/qemu-system-x86_64", args);
-			execl("/usr/bin/qemu-system-x86_64", args, NULL);
+			execv("/usr/bin/qemu-system-x86_64", qemu_argv);
 		} else
 			continue;
 
