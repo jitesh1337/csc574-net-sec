@@ -8,12 +8,14 @@
 #include <unistd.h>
 #include <openssl/sha.h>
 #include <sys/utsname.h>
+#include <signal.h>
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <libgen.h>
 
-#define SOCK_PATH "secure_socket"
+#define SOCK_PATH	"secure_socket"
 #define	MAX_ARGS	128
+#define LAUNCHER	"/usr/bin/qemu-system-x86_64"	
 
 unsigned char original_launcher_sha1[] = {0x27, 0x9b, 0xd7, 0xaa, 0x13, 0xaf, 0x12, 0x38, 0x11, 0x26, 0xc9, 0xec, 0x76, 0x4c, 0x1a, 0xb0, 0x50, 0xe0, 0x27, 0x6c};
 
@@ -103,7 +105,7 @@ int main(void)
 		close(s2);
 
 		/* Hash of the launcher */
-		rc = get_hash("/usr/bin/qemu-system-x86_64", sha1);
+		rc = get_hash(LAUNCHER, sha1);
 		if (rc != 0)
 			return rc;
 
@@ -115,12 +117,22 @@ int main(void)
 		args = strtok(str, ";");
 		secret = strtok(NULL, "; \n\t");
 
-		split_args("/usr/bin/qemu-system-x86_64", args, qemu_argv);
+		split_args(LAUNCHER, args, qemu_argv);
 		pid = fork();
 		if (pid == 0) { /* child */
-			execv("/usr/bin/qemu-system-x86_64", qemu_argv);
-		} else
+			execv(LAUNCHER, qemu_argv);
+			/* Won't reach here */
+		} else {
+			rc = get_hash(LAUNCHER, sha1);
+			if (rc == 0) {
+				if (memcmp(sha1, original_launcher_sha1, 20) == 0) 
+					continue;
+			}
+			/* If reached here, then launcher binary has been maliciously
+			 * modified. Kill the child */
+			//kill(pid, SIGKILL);
 			continue;
+		}
 
 	}
 
