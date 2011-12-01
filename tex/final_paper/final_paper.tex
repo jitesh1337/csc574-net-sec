@@ -1,0 +1,93 @@
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%
+%   File          : related_work.tex
+%   Author(s)     : Ashwin Shashidharan <ashashi3@ncsu.edu> and Jitesh Shah <jhshah@ncsu.edu>
+%   Description   : Related Work for the Project
+%
+%   Last Modified : Wed Sep 28 21:30:30 EDT 2011
+%   By            :  Ashwin Shashidharan <ashashi3@ncsu.edu> and Jitesh Shah <jhshah@ncsu.edu>
+%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\documentclass[10pt,twocolumn,pdftex]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{comment}
+\usepackage{ifthen}
+\usepackage{graphicx}
+\usepackage[hyphens]{url}
+\usepackage{times}
+% hyperref sometimes causes strange build errors. Comment if problems
+\usepackage[pdftex,colorlinks=true,citecolor=black,filecolor=black,%
+            linkcolor=black,urlcolor=black,draft]{hyperref}
+%\usepackage{listings}
+%\usepackage{fancyvrb}
+%\usepackage{amsmath}
+%\usepackage{amsthm}
+%\usepackage{amssymb}
+
+% Some quick utils
+% Use:
+% \begin{itemize} \itembase{3pt}
+%  \item ...
+% \end {itemize}
+\newcommand{\itembase}[1]{\setlength{\itemsep}{#1}}
+
+\title{Enabling Cloud Customers to Trust the Cloud}
+
+\author{Ashwin Shashidharan and Jitesh Shah \\
+\url{{ashashi3,jhshah}@ncsu.edu}
+}
+\date{November 30, 2011}
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+Cloud computing has emerged into a very popular \cite{adoption-survey} means of scaling up quickly without the associated infrastructure costs. The promise is complete freedom from maintaining own server infrastructures and moving to third-party infrastructure providers. Despite it's increasing popularity, a significant chunk of applications haven't yet found a place in the cloud. The reason is the lack of guarantees, from the cloud provider, about the security of customer data stored on the cloud. Even in the presence of such guarantees, the cloud customer would want to ensure that a very small chunk of \emph{auditable} infrastructure on the cloud side is trusted. Using that as a Trust Computing Base (TCB), the customer would build his own security to protect his data, thus, having the guarantees. Note that the threat to the customer data does \emph{not} come from the cloud provider, but, attacks on the cloud provider by competitors using the same cloud service or other external attackers. 
+
+This paper proposes a way to enable the customer to protect its data in the face of a cloud compromise. Two key technologies are used to build the security architecture: SELinux (Security Enhanced Linux) \cite{SELinux} and TPM (Trusted Platform Modules) \cite{TCG}. Both of these technologies allow confining the root user. We also describe a range of feasible attacks and how the customer data can be protected in the face on these attacks using the proposed architecture.\\ \\
+\emph{Keywords}:  Trusting the cloud, SELinux, TPM, SSL/TLS, symmetric encryption/integrity verification.
+\end{abstract}
+
+\section{Introduction}
+According to a Berkeley publication \cite{controlling-data-in-the-cloud}, all the top five software companies by sales revenue have their own cloud offerings. Popular sites such as reddit.com and quora.com run completely off the cloud. Merrill Lynch estimates the market capitalization of the "Cloud Computing" sector to be as large as 16B in 2011. Inspite of such impressive growth, a Morgan-Stanley survey \cite{morgan-stanley} says that only 28\% respondents of the survey use public cloud of some form in their daily operations whereas only 14\% use IaaS services of any kind. Various publications \cite{controlling-data-in-the-cloud, ENISA} clearly identify the risks associated with security of the storing data in the cloud. Fear of leakage of sensitive data from the cloud is a common thread in these publications. These risks induce a "Fear of the Cloud", thus, slowing down adoption. Vulnerabilities discovered in popular cloud services like Amazon EC2 \cite{amazon-ec2-vulnerability} and Dropbox \cite{dropbox-vulnerability} exacerbates the fear. 
+
+For the corporations to offload their secure data on the cloud, they need to have guarantees against leakage of the data. Such guarantees can come only from a huge audit of the cloud provider, which might be unfeasible and time consuming considering the size of the cloud providers, or getting themselves involved in designing of the security on the cloud provider side. The cloud can thus be viewed, from the perspective of our project, as a provider of infrastructure and a Trusted Computing Base (TCB) which can be utilized by the cloud customers to enforce a security policy. \\
+
+Various methods have been proposed in the past to avoid data leakage from the cloud. Just encrypting data in the cloud (without any trusted software) has been discussed in literature sparingly \cite{cryptographic-cloud-storage, towards-secure-cloud-storage}. The problem with just encrypting the data, without attestation of the underlying software, is that the underlying software might be maliciously modified by an attacker who broke into the cloud provider. A modified guest kernel would definitely be able to steal all the encryption keys. So, even though encryption is an essential component of securing the data, a trusted computing base is essential too.
+
+Setting up a Trusted Computing Base (TCB) for the cloud has been discussed far more often \cite{towards-trusted-cloud-computing, seeding-clouds-with-trust-anchors, terra, semantic-remote}. A TCB starts from a root of trust. The root of trust is usually a TPM (Trusted Platform Module). Starting with the TPM, the BIOS, bootloader and the Operating System are verified before passing control to them. Any modification to any of the above components would lead to failure of Remote Attestation. The problem with such an approach is that, it provides security only in static aspects. Any attack on the runtime system (process, memory, etc) would go undetected. 
+
+Literature also talks about runtime integrity verification \cite{integrity-1, integrity-2, integrity-3, integrity-4}. The problem with runtime integrity verification is that they are very difficult to get right in practice. No cloud in the current market offers runtime integrity verification \cite{seeding-clouds-with-trust-anchors}.
+
+Without runtime integrity protection, the data on the cloud will still be vulnerable to attacks of the dynamic nature. A practical alternative to runtime integrity verification is to sandbox the trusted VM launcher process, minimize its interaction with the outside world and audit the small external facing code thoroughly for security vulnerabilities. Thus, in addition to encryption and trusted computing, we propose to use strong Mandatory Access Control (MAC) based confinement techniques to sandbox the trusted VM launcher and the kernel images. This can be viewed as a light-weight and practical alternative to the complex runtime integrity verification techniques. SELinux \cite{SELinux} is an implementation of MAC on Linux-based systems. We use SELinux to sandbox the launcher and thus, protecting it from dynamic attacks. Hardening the core virtual infrastructure of a cloud has been discussed in atleast one paper before \cite{secure-cloud-core}. 
+
+We propose that the cloud customer encrypt and integrity verify the kernel used to boot his VM image. Since the threat model is attack on the cloud, we propose that the keys for encryption/decryption of kernel and the data (two separate keys) be stored on the customer side. The keys are revealed only to an attested and authenticated (via SSL \cite{SSL}) cloud process. The cloud process verified cloud process then goes on to provision the guest image on one of its machines.
+
+Note that the core of the idea is protection of business critical data in the face of attacks on the cloud infrastructure.
+
+Section \ref{sec:terminology} explains some terminology used widely in the paper. Section \ref{sec:problem} further explains the problem statement and the threat model (what we protect against). Section \ref{sec:approach} explains and justifies the solution in detail. Section \ref{sec:evaluation} lists the types of possible attacks that we envision and defences in place against them. Section \ref{sec:related} lists some related work we are aware of and lastly section \ref{sec:conclusion} concludes the paper.
+
+\section{Terminology}
+\label{sec:terminology}
+
+\section{Problem Statement}
+\label{sec:problem}
+
+\section{Approach}
+\label{sec:approach}
+
+\section{Experimental Evaluation}
+\label{sec:evaluation}
+
+\section{Related work}
+\label{sec:related}
+
+\section{Conclusion}
+\label{sec:conclusion}
+
+\bibliography{references}{}
+\bibliographystyle{plain}
+\end{document}
+
+
