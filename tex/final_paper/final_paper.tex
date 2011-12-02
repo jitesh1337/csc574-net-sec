@@ -84,6 +84,7 @@ When the machine is reset, TPM is booted with all PCRs reset. The hardware then 
 Note that to perform these operations on a TPM, AuthData is required. AuthData can be thought of as the key to unlock the operations of the TPM. It could be as simple as a password or a complex derivation (salted hash, etc) of a password. 
 
 \subsection{SELinux}
+\label{sec:selinux}
 Security Enhanced Linux (SELinux) \cite{SELinux} is an implementation of Mandatory Access Control (MAC) over a traditionally DAC (Discretionary Access Control) implementation on Linux Systems. The advantage of MAC over DAC is that the security policy is centrally administered from a policy database and cannot be modified by the users. MAC also offers a more fine-grained control on the resources that can be accessed by a subject. For example, it is possible to disallow Apache httpd to send emails, but allow to write files in a certain directory.
 
 SELinux bases it decisions on the tuple {user, role, type}. The user is SELinux user and \emph{not} the Linux user. Roles can be used to implement RBAC (Role Based Access Control). Type is field on which access control decisions are based on. This 3-tuple is known as the \emph{context}. Each subject and object has a context. To execute a file from a different context, a transition rule must explicitly enable the process to transition from one context to the other. Execution then continues on the new context. Read and write accesses can be granted to other types. For example,\\
@@ -144,7 +145,7 @@ A proper hash of {BIOS, bootloader, kernel, secure launcher daemon} is extended 
 
 The next section describes the operation of the setup.
 
-\subsection{Overview}
+\subsection{Solution}
 The very first step to secure data in the cloud is to encrypt it. The cloud provider can provide facilities for encryption just before storing to the persistent storage at the cloud site. However, according to the end-to-end argument \cite{end-to-end}, if the cloud customer needs guarantees, the encryption has to be done at the application layer by the customer software. The customer may choose to have a full-disk encryption (encrypts the whole filesystem) \cite{disk-encryption, truecrypt} or a selective file-encryption \cite{nss}. In either method, for efficiency reasons, the encryption technique chosen would probably be some kind of symmetric encryption (like AES) and will need a key. 
 
 This key cannot be stored on the guest image in plaintext, since the attacker has access to the guest image from the management node and he can directly read it off the image. As describer above, the keys will be revealed only to a cloud process who can provide attestation (using TCB) and authenticate itself using SSL. Next we describe ways in which it will be impossible (or atleast hard) for an attacker to falsely pose to the customer as an attested cloud process.
@@ -160,9 +161,85 @@ The data decryption keys are passed on to the guest kernel via a shared page or 
 
 Note that the \emph{secure launcher daemon} is confined using SELinux. The SELinux policy recommendations and how to sandbox the daemon is described in detail in a later section.
 
+\subsection{SELinux Policy}
+An introduction to SELinux can be found in section \ref{sec:selinux}. Confining the secure launcher daemon to a sandbox is a critical part of protecting the data. The SELinux policy should be able to protect the sandboxed daemon from the following intrusions: Compromised server (httpd, sshd, etc) giving root access to the attacker and password guessed for one of the users for sshd eventually giving root access on the management node to the attacker. 
+
+Before discussing the SELinux policy, it would be worthwhile to discuss some SELinux quirks.
+
+Three SELinux usertypes we need to know about are: {\tt user\_u, system\_u and unconfined\_u}. The {\tt user\_u} type is the most restrictive among the three. It allows the user only to access files which are allowed to the {\tt user\_t} type and the types it can transition to. The user type {\tt system\_u} is reserved for system operations and SELinux commands. The {\tt unconfined\_u} user is a special user category which reduces the user to the DAC privileges i.e. no MAC. Clearly, {\tt unconfined\_u} and {\tt system\_u} user types are potential threats to the security of the system and need to be well-monitored.\\
+
+A management node on the cloud has a defined set of responsibilities and hence, known set of software running on it with known responsibilities. This makes it feasible to write \emph{strong} SELinux policies for it. Each server/daemon should be constrained to its own domain and given access to just the files it absolutely needs. This is not an unruly demand. Fedora already comes with a Targeted SELinux policy that has known servers (httpd, sshd, etc) appropriately confined. For example, httpd subjects and objects are labelled with the type {\tt httpd\_t}. 
+
+Writing a new policy from scratch for the Management node is a tough job. One needs to know a lot about the internal workings of a program to be able to write a policy for it. Consequently, a better approach is to start with a stock policy like Fedora's targeted policy and rip-off the potentially insecure parts.
+
+The targeted policy maps each Linux user to the SELinux {\tt unconfined\_u} user. As we have seen above, such a mapping reduces the system to a DAC system. This gives the root user ultimate privileges. In order to confine root, it is necessary to remove the {\tt unconfined\_u} SELinux user totally from the system. This can be done by the following set of commands:\\ \\
+{\tt \# sudo semanage login -m -s "user\_u" -r s0 \_\_default\_\_}\\
+{\tt \# sudo semanage login -m -s "user\_u" -r s0 root} \\
+{\tt \# sudo semodule -r unconfined}\\
+
+The first command maps all the Linux usernames to {\tt user\_u} SELinux user. The second command maps the Linux root user to {\tt user\_u} SELinux user.  The third command removes the unconfined module. Removing the unconfined module greatly adds to the security. The Linux root user can now be confined and hence, damage control is possible.
+
+\subsubsection{Sandboxing the secure launcher daemon}
+A new SELinux user is now defined for secure launcher daemon, say, {\tt secure\_u}. All the files needed by the daemon are marked with the type {\tt secure\_t}. Thus, only the secure daemon can access the files. No transition is allowed to or from {\tt secure\_t} type. This gives the appropriate sandboxing. 
+
+\subsubsection{Constraining the root user}
+Mapping the Linux root user to the SELinux {\tt user\_u} user already took off many of the privileges of the root user. Adding "PermitRootLogin=no" to the sshd config disallows root login over ssh. But, it would be truly wishful thinking to assume that a root login will never be needed. Upgrading the guest machine, Adding new software, Reconfiguration would be impossible without root. The trick then is to permit a transition to the unconfined domain ONLY if the user can prove physical access. Physical access means the process should have a tty. Adding the following line to the {\tt /etc/sudoers} will enable one to sudo to root user with unconfined access: \\
+
+{\tt root ALL=(ALL) TYPE=unconfined\_t ROLE=unconfined\_r ALL} \\
+
+A minor patch to "sudo" will check for the presence of tty (using a call to {\tt isatty()}) before granting the root access. 
+
+Since a remote attacker can never have a physical tty, he can never have an unconfined root access to the management node.
+
 \section{Experimental Evaluation}
 \label{sec:evaluation}
 
+\subsection{Tools Used}
+Since none of us had access to a real TPM, we used a TPM emulator software from BerliOS ({\tt tpm\_emulator-0.7.2}). It exports a device {\tt /dev/tpm} and a user-space daemon {\tt tpmd} which emulates the TPM hardware. Any requests on the TPM device file are forwarded to the daemon for execution. We used the {\tt TrouSerS} library to interface with the TPM in userspace ({\tt trousers-0.3.6}). We also used a patched version of {\tt tpm-tools-1.3.5} package for the TPM unseal operation.
+
+We used the {\tt OpenSSL} library for SSL communication and symmetric key encryption/decryption/integrity verification. Specifically {\tt openssl-1.0.0e-1}. 
+
+Since actual implementation of a cloud with a provisioning engine is infeasible on a local machine, we used a poor man's cloud: a virtual machine. We chose KVM \cite{KVM}, since it is popular and opensource. Overall to come up with a proof of concept, we used the following tools: Host machine acts as Management node. {\tt qemu-kvm} acts as the provisioning engine (It is actually an emulator, but at a higher level, given a kernel image, it first does the appropriate provisioning on the host machine and then boots the image). Specifically we used {\tt qemu-kvm-0.14.0} as our "launcher". \\
+
+All the experiments were performed on a Lenovo SL510 laptop running a Core 2 Duo @ 2.1GHz processor with 1GB of RAM. 
+
+\subsection{Attack Vectors}
+In this section we describe the various attacks that an attacker can launch and our defences against them. The premise of an attack is that the attacker can obtain \emph{remote root shell access} on the management node. This may me obtained by compromising one of the servers running on the management node or guessing a password of one of the users over sshd (either root user or other non-root user). In the presence of this shell access, the problem definition is to protect the confidentiality of customer data.
+
+\subsubsection{Re-program the TPM}
+Since TPM is our root of trust, a malicious attacker can try to reset the TPM to cause DoS a attack or the attacker can try to unseal the SSL private key using PCR\#16 which already has the correct extended hash. There are two defences in place against this attack:
+\begin{enumerate}
+\item Authdata is required to seal/unseal data from the TPM or program the TPM.
+\item The TPM device, {\tt /dev/tpm} is labelled as {\tt secure\_t} and hence, can be accessed only by processes who can transition to that type. Thus, only processes part of TCB i.e. the secure launcher daemon and the actual launcher is allowed to access the TPM device.
+\end{enumerate}
+
+\subsubsection{Steal kernel/data encryption keys}
+The attacker can try to steal the kernel encryption key (to create a malicious kernel and a valid HMAC for it) or the data encryption key (to compromise the actual customer data). The defences against these attacks are:
+\begin{enumerate}
+\item The customer site reveals the keys only to properly attested and authenticated cloud process. To authenticate to the customer site, the attacker will need the SSL private key of the cloud provider. This has been sealed off in the TPM and can be unsealed only by processes in the TCB as explained earlier. 
+\item SELinux confinements make sure that no user or server gets unconfined access to the management node. Unconfined access can only be obtained via a physical terminal. Thus, privileged operations like inserting a kernel module in the kernel are not possible for a remote attacker, thus, disallowing the attacker to sniff memory after SSL has decrypted the keys into memory.
+\end{enumerate}
+
+\subsubsection{Modify the kernel}
+The attacker may try to maliciously modify the guest kernel in order to steal the customer data. However, the kernel is stored encrypted and integrity-protected. Thus, any modification in the kernel will be caught and the secure launcher daemon would refuse to boot the kernel. Also, SELinux confinements make sure that the kernel image is marked with the type {\tt secure\_t} and thus, can only be accessed by the processes in the TCB.
+
+\subsubsection{Use a customized kernel}
+The attacker may just try to get his own kernel copy and a launcher binary and try to boot an image completely outside of the TCB. Although nothing will prevent such a image to boot, the attacker doesn't have access to the data decryption keys and hence, cannot decrypt data on the guest image. The data decryption keys can only be obtained by processes in the TCB.
+
+\subsubsection{Attack launcher process}
+There are two possible places where the secure launcher daemon interacts with the external world: To get a launch request from the httpd server (via a Unix socket, in our implementation) and the SSL connection to the customer site. The launch request is merely a string with appropriate parameters to boot the VM and optionally, Authdata. This string is fed into the Unix socket that the secure launch daemon reads. The customer audit should make sure that the string is properly checked for possible buffer overflow attack and XSS attacks. The SSL connection merely transfers a known number of bytes (two keys and an HMAC) from customer site to the cloud site and hence, the code to parse them can be easily sanitized. The only real point of attack is the OpenSSL library. A vulnerability in the OpenSSL library could indeed compromise the secure launcher daemon and hence, the whole scheme. Fortunately, OpenSSL is a security-sensitive code and millions of eyes around the world audit OpenSSL for possible vulnerabilities. It is recommended to keep a watch on the OpenSSL vulnerabilities page \cite{openssl-vulnerabilities} and update as soon as a new version is available (New versions usually fix bugs). 
+SELinux confinements on the management node (disallowing remote unconfined users, {\tt secure\_t} labelling, etc) leave only the above two possible attack alleys on the secure launcher daemon.
+
+\subsubsection{Access running guest VM}
+Although in our test case, we run the management node \emph{and} the guest machine on the same physical machine, in the real cloud, the guest VM will be provisioned on a different physical node and hence, its memory and other dynamic characteristics cannot be directly accessed from the management node by the attacker.
+
+\subsubsection{Cold boot attacks}
+The attacker might try to start a malicious kernel on the same physical node that a customer VM was running on, and try to read the memory in the hope of catching stray sensitive data. The provisioning software or the customer kernel should zero out the physical memory before allowing another kernel to execute in the same physical space. Such a requirement should be checked as a part of the security audit done by the customer. 
+\\
+
+Finally from the practical perspective, no security system can be perfect and we don't claim that ours is perfect either. Writing a SELinux policy is a complex task and prone to errors, hence, we have included as much fallback security as possible. Some core areas do have to be protected with SELinux without an option. Those are: disallow unconfined access, protect {\tt /dev/tpm} with {\tt secure\_t} label, label the secure launcher daemon the files it needs as {\tt secure\_t}. We believe that implementing the methods described above would raise the bar of security on the cloud significantly.
+
+\subsubsection{Performance overhead}
 
 \section{Related work}
 \label{sec:related}
