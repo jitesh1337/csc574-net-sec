@@ -13,11 +13,15 @@ static int response_server(SSL *sslHandle,  int socket_fd) {
 	BIO_set_ssl(ssl_bio, sslHandle, BIO_CLOSE);
 	BIO_push(io, ssl_bio);
 	
-//	int bytes_read;
-	FILE *ifp = fopen("/home/jitesh/repos/ashwin/test_file", "r");
+	FILE *ifp = fopen("in_params", "r");
+	if (ifp == NULL) {
+		fprintf(stderr, "Can't open in_params file to read configuration\n");
+		exit(1);
+	}
 
-	// Read exact number (16 bytes)
+	/* Read key + ivec + kernel's HMAC */
 	fread(buf, 1, 2*AES_BLOCK_SIZE+64, ifp);
+
 	/* Write to SSL socket stream */
 	if((returnVal = BIO_write(io, buf, 2*AES_BLOCK_SIZE+64)) <= 0)
 		err_exit("Write error");
