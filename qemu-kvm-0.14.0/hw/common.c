@@ -1,4 +1,5 @@
 #include "common.h"
+#include "client.h"
 #include <openssl/err.h>
 
 BIO *bio_err = 0;
@@ -16,9 +17,44 @@ int berr_exit(char *string) {
 	exit(0);
 }
 
+static long get_file_size(FILE *f)
+{
+	long where, size;
+
+	/* XXX: on Unix systems, using fstat() probably makes more sense */
+
+	where = ftell(f);
+	fseek(f, 0, SEEK_END);
+	size = ftell(f);
+	fseek(f, where, SEEK_SET);
+
+	return size;
+}
+
+unsigned char * get_key(char *der_file, int *size)
+{
+
+    X509 *crt = NULL;
+	FILE *ifp = fopen(der_file, "r");
+	int bytes_read = 0;
+	char indata[1024];
+
+	int keylength = get_file_size(ifp);
+	unsigned char *key = (unsigned char*) malloc(sizeof(unsigned char) * keylength);
+
+	bytes_read = fread(key, 1, keylength, ifp);
+	fclose(ifp);
+	*size = bytes_read;
+	//printf("bytes_read: %d\n", bytes_read);
+
+    return key;
+}
+
 SSL_CTX* initialize_ctx(char *keyfile) {//, char *password) {
 	SSL_METHOD *ssl_method;
 	SSL_CTX *ctx;
+	unsigned char *der_key;
+	int size;
 
 	if(!bio_err) {
 	  /* Global system initialization*/
@@ -37,9 +73,11 @@ SSL_CTX* initialize_ctx(char *keyfile) {//, char *password) {
 	if(!(SSL_CTX_use_certificate_chain_file(ctx, keyfile)))
 		berr_exit("Can't read certificate file");
 
+	der_key = get_key(PRIVATE_KEYFILE, &size);
 	//pass = password;
 //	SSL_CTX_set_default_passwd_cb(ctx, password_cb);
-	if(!(SSL_CTX_use_PrivateKey_file(ctx, keyfile, SSL_FILETYPE_PEM)))
+	if(!(SSL_CTX_use_PrivateKey_ASN1(EVP_PKEY_RSA, ctx, der_key, size)))
+	//if(!(SSL_CTX_use_PrivateKey_file(ctx, keyfile, SSL_FILETYPE_PEM)))
 		berr_exit("Can't read key file");
 
 	/* Load the CAs we trust*/
