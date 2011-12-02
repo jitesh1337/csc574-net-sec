@@ -1,3 +1,20 @@
+TPM STEPS
+---------
+1) Take the ownership of the TPM
+
+# tpm_takeownership
+Enter owner password: 
+Confirm password: 
+Enter SRK password: 
+Confirm password: 
+
+Enter owner and SRK passwords.
+
+2) Seal the data
+
+# tpm_sealdata -i client.pem -o client.pem.enc -p 16
+
+
 1) encrypt/decrypt work fine
 2) the examples for openssl works if you generate proper keys
 3) The SSL Certificates file has the readme how to create certificates
