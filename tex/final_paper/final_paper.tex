@@ -52,11 +52,11 @@ This paper proposes a way to enable the customer to protect its data in the face
 \section{Introduction}
 According to a Berkeley publication \cite{controlling-data-in-the-cloud}, all the top five software companies by sales revenue have their own cloud offerings. Popular sites such as reddit.com and quora.com run completely off the cloud. Merrill Lynch estimates the market capitalization of the "Cloud Computing" sector to be as large as 16B in 2011. Inspite of such impressive growth, a Morgan-Stanley survey \cite{morgan-stanley} says that only 28\% respondents of the survey use public cloud of some form in their daily operations whereas only 14\% use IaaS services of any kind. Various publications \cite{controlling-data-in-the-cloud, ENISA} clearly identify the risks associated with security of the storing data in the cloud. Fear of leakage of sensitive data from the cloud is a common thread in these publications. These risks induce a "Fear of the Cloud", thus, slowing down adoption. Vulnerabilities discovered in popular cloud services like Amazon EC2 \cite{amazon-ec2-vulnerability} and Dropbox \cite{dropbox-vulnerability} exacerbates the fear. 
 
-For the corporations to offload their secure data on the cloud, they need to have guarantees against leakage of the data. Such guarantees can come only from a huge audit of the cloud provider, which might be unfeasible and time consuming considering the size of the cloud providers, or getting themselves involved in designing of the security on the cloud provider side. The cloud can thus be viewed, from the perspective of our project, as a provider of infrastructure and a Trusted Computing Base (TCB) which can be utilized by the cloud customers to enforce a security policy. \\
+For corporations to offload their secure data to the cloud, they need to have guarantees against leakage of thire data. Such guarantees can come only from a huge audit of the cloud provider, which might be unfeasible and time consuming considering the size of the cloud providers, or getting themselves involved in designing of the security on the cloud provider side. The cloud can thus be viewed, from the perspective of our project, as a provider of infrastructure and a Trusted Computing Base (TCB) which can be utilized by the cloud customers to enforce a security policy. \\
 
-Various methods have been proposed in the past to avoid data leakage from the cloud. Just encrypting data in the cloud (without any trusted software) has been discussed in literature sparingly \cite{cryptographic-cloud-storage, towards-secure-cloud-storage}. The problem with just encrypting the data, without attestation of the underlying software, is that the underlying software might be maliciously modified by an attacker who broke into the cloud provider. A modified guest kernel would definitely be able to steal all the encryption keys. So, even though encryption is an essential component of securing the data, a trusted computing base is essential too.
+Various methods have been proposed in the past to avoid data leakage from the cloud. Simply encrypting data in the cloud (without any trusted software) has been discussed in literature sparingly \cite{cryptographic-cloud-storage, towards-secure-cloud-storage}. The problem with just encrypting the data, without attestation of the underlying software, is that the underlying software could have been maliciously modified by an attacker who has broken into the cloud provider. A modified guest kernel would definitely be able to steal all the encryption keys. So, even though encryption is an essential component of securing the data, a trusted computing base is essential too.
 
-Setting up a Trusted Computing Base (TCB) for the cloud has been discussed far more often \cite{towards-trusted-cloud-computing, seeding-clouds-with-trust-anchors, terra, semantic-remote}. A TCB starts from a root of trust. The root of trust is usually a TPM (Trusted Platform Module). Starting with the TPM, the BIOS, bootloader and the Operating System are verified before passing control to them. Any modification to any of the above components would lead to failure of Remote Attestation. The problem with such an approach is that, it provides security only in static aspects. Any attack on the runtime system (process, memory, etc) would go undetected. 
+Setting up a Trusted Computing Base (TCB) for the cloud has been more widely discussed \cite{towards-trusted-cloud-computing, seeding-clouds-with-trust-anchors, terra, semantic-remote}. A TCB is setup with an established root of trust. The root of trust is usually a TPM (Trusted Platform Module). Beginning with the TPM, the BIOS, bootloader and the Operating System are verified before passing control to them. Any modification to any of the above components would lead to failure of Remote Attestation. The problem with such an approach is that, it provides security only in static aspects. Any attack on the runtime system (process, memory, etc) would go undetected. 
 
 Literature also talks about runtime integrity verification \cite{integrity-1, integrity-2, integrity-3, integrity-4}. The problem with runtime integrity verification is that they are very difficult to get right in practice. No cloud in the current market offers runtime integrity verification \cite{seeding-clouds-with-trust-anchors}.
 
@@ -66,10 +66,40 @@ We propose that the cloud customer encrypt and integrity verify the kernel used 
 
 Note that the core of the idea is protection of business critical data in the face of attacks on the cloud infrastructure.
 
-Section \ref{sec:terminology} explains some terminology used widely in the paper. Section \ref{sec:problem} further explains the problem statement and the threat model (what we protect against). Section \ref{sec:approach} explains and justifies the solution in detail. Section \ref{sec:evaluation} lists the types of possible attacks that we envision and defences in place against them. Section \ref{sec:related} lists some related work we are aware of and lastly section \ref{sec:conclusion} concludes the paper.
+Section \ref{sec:background} explains some terminology used widely in the paper. Section \ref{sec:problem} further explains the problem statement and the threat model (what we protect against). Section \ref{sec:approach} explains and justifies the solution in detail. Section \ref{sec:evaluation} lists the types of possible attacks that we envision and defences in place against them. Section \ref{sec:related} lists some related work we are aware of and lastly section \ref{sec:conclusion} concludes the paper.
 
-\section{Terminology}
-\label{sec:terminology}
+\section{Background}
+\label{sec:background}
+In this section we will give a background of some of the technologies employed in the project.
+
+\subsection{Trusted Platform Module}
+The Trusted Computing Group (TCG) \cite{TCG} was formed with a goal of creating a Trusted Platform Module (TPM). A TPM is a secure cryptoprocessor which is activated from very early in the boot process. The property of TPM which makes it useful is that it can seal data inside it and reveal only to a verified authority. Since, the data inside the TPM is unforgeable, TPM can be used as a root of trust. The idea is to start with this root and expand the perimeters of trust one-by-one from BIOS to the OS to the applications.
+
+A TPM usually has a small processor which can do symmetric as well as asymmetric cryptography. An asymmetric key called the SRK (Storage Root Key) is burnt into the TPM, unreadable by the external world. The SRK is used to create a tree of keys used to perform encryption/decryption. This makes sure that any encrypt/decrypt operation needs SRK and hence, an involvement of the TPM.
+
+There is also some permanent storage available in the form of Platform Configuration Registers (PCRs). There can be upto 32 such PCRs according to the TCG 1.2 specification. It is not possible to directly write to a PCR. A TPM supports only two operations to a PCR: Read and Extend. Following paragraph describes how to establish trust using a TPM.
+
+When the machine is reset, TPM is booted with all PCRs reset. The hardware then calculate the hash of the BIOS code and extends it to a PCR in the TPM, say, PCR\#16 and the control is passed to the BIOS. The BIOS calculates hash of the boot loader and extends it to PCR\#16 again and passes control to the bootloader. The bootloader does the same for the kernel. Thus, after the kernel is booted, the value in PCR\#16 is a unique summary of {BIOS, bootloader, kernel} tuple. Any modification in either of these will change the value in PCR\#16. Now keys can be created and data encrypted against PCR\#16. Only unmodified kernel can then unseal the secret values. Thus, a TPM can be used to reveal secrets only to trusted parties. 
+
+Note that to perform these operations on a TPM, AuthData is required. AuthData can be thought of as the key to unlock the operations of the TPM. It could be as simple as a password or a complex derivation (salted hash, etc) of a password. 
+
+\subsection{SELinux}
+Security Enhanced Linux (SELinux) \cite{SELinux} is an implementation of Mandatory Access Control (MAC) over a traditionally DAC (Discretionary Access Control) implementation on Linux Systems. The advantage of MAC over DAC is that the security policy is centrally administered from a policy database and cannot be modified by the users. MAC also offers a more fine-grained control on the resources that can be accessed by a subject. For example, it is possible to disallow Apache httpd to send emails, but allow to write files in a certain directory.
+
+SELinux bases it decisions on the tuple {user, role, type}. The user is SELinux user and \emph{not} the Linux user. Roles can be used to implement RBAC (Role Based Access Control). Type is field on which access control decisions are based on. This 3-tuple is known as the \emph{context}. Each subject and object has a context. To execute a file from a different context, a transition rule must explicitly enable the process to transition from one context to the other. Execution then continues on the new context. Read and write accesses can be granted to other types. For example,\\
+{\tt \# allow user\_t other\_t:file create \{read\}} \\
+The rule states that \emph{user\_t} type is allowed to only read the files on the type \emph{other\_t}.\\
+
+We use SELinux to sandbox the launcher process and to confine the root user.
+
+\subsection{SSL/TLS}
+Transport Layer Security or its predecessor Secure Socket Layer is a cryptographic suite used to provide encrypted and authenticated communication between two parties who trust a thrid-party called the Certificate Authority (CA). SSL/TLS is now being widely deployed on all major websites including Google, Facebook, Twitter, etc to avoid several man-in-the-middle and DNS attacks. 
+
+We use SSL/TLS to mutually authenticate the cloud provider and the customer site. We also use encrypted communication to transfer sensitive data from customer site to the cloud side.
+
+\subsection{Misc}
+This subsection will explain terminology used throughout the paper.
+We use the term \emph{Management node} to refer to a node in the cloud which is exposed to the outside world as well as the VM image store, which makes it vulnerable to attacks. The term \emph{Launcher} is used to denote the process which launches and provisions the guest image upon a trigger from another process (like the webserver. The webserver accepts launch requests from the customer and triggers the \emph{launcher}). 
 
 \section{Problem Statement}
 \label{sec:problem}
