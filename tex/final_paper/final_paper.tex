@@ -215,7 +215,11 @@ The targeted policy maps each Linux user to the SELinux {\tt unconfined\_u} user
 The first command maps all the Linux usernames to {\tt user\_u} SELinux user. The second command maps the Linux root user to {\tt user\_u} SELinux user.  The third command removes the unconfined module. Removing the unconfined module greatly adds to the security. The Linux root user can now be confined and hence, damage control is possible.
 
 \subsubsection{Part two: Sandboxing the secure launcher daemon}
-A new SELinux user is now defined for secure launcher daemon, say, {\tt secure\_u}. All the files needed by the daemon are marked with the type {\tt secure\_t}. Thus, only the secure daemon can access the files. No transition is allowed to or from {\tt secure\_t} type. This gives the appropriate sandboxing. 
+A new SELinux user is now defined for secure launcher daemon, say, {\tt secure\_u}. All the files needed by the daemon are marked with the type {\tt secure\_t}. Thus, only the secure daemon can access the files. No transition is allowed to or from {\tt secure\_t} type. This gives the appropriate sandboxing. Following commands show how to add a new user and label files: \\
+{\tt \# sudo semanage user --add --level s0 -r s0-s0 --role secure\_r --prefix user secure\_u}\\
+{\tt \# sudo semanage fcontext --add --seuser secure\_u --type secure\_t /dev/tpm}\\
+
+The first command adds a new SELinux user called {\tt secure\_u}. The second command shows how file pertinent to the secure launcher daemon can be labelled to the type {\tt secure\_t}. 
 
 \subsubsection{Unconfined privileges to root in limited cases}
 Mapping the Linux root user to the SELinux {\tt user\_u} user already took off many of the privileges of the root user. Adding "PermitRootLogin=no" to the sshd config disallows root login over ssh. But, it would be truly wishful thinking to assume that a root login will never be needed. Upgrading the guest machine, adding new software, reconfiguration would be impossible without root. The trick then is to permit a transition to the unconfined domain ONLY if the user can prove physical access. Physical access means the requesting process should have a tty. Adding the following line to the {\tt /etc/sudoers} will enable one to sudo to root user with unconfined access: \\
