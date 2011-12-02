@@ -57,7 +57,7 @@ static uint8_t verify_digest(uint8_t *decrypted_kernel, unsigned char *expected,
         	printf("\nTest ok, result length %d\n", result_len);
 		return 1;
 	}
-	else { fprintf(stdout, "\nHey you change the hash!!"); }
+	else { fprintf(stdout, "\nHey you change the hash!!"); fflush(stdout);}
 
     return 0;
 }
@@ -135,7 +135,7 @@ uint8_t* keys_digest_request_decrypt(SSL *sslHandle, const char* kernel_filename
 	printf("Kernel filename: %s\n", kernel_filename);
 	printf("Kernel filesize: %d\n", kernel_size);
 
-	decrypted_kernel = (uint8_t*) qemu_malloc(kernel_size + 1);
+	decrypted_kernel = (uint8_t*) qemu_malloc(kernel_size + 16);
 
 	/* data structure that contains the key itself */
 	AES_KEY key;
@@ -154,12 +154,10 @@ uint8_t* keys_digest_request_decrypt(SSL *sslHandle, const char* kernel_filename
 		bytes_read = fread(indata, 1, AES_BLOCK_SIZE, ofp);
 
 		bytes_read2 = fread(tempdata, 1, AES_BLOCK_SIZE, ifp);
+		if (bytes_read == 0 || bytes_read2 == 0)
+			break;
 		AES_cfb128_encrypt(tempdata, outdata, bytes_read, &key, ivec, &num, AES_DECRYPT);
 		fwrite(outdata, 1, bytes_read2, ofp1);
-
-		if (!memcmp(tempdata, indata, 16)) {
-			printf("didnot fail in round no. %d", i);
-		}
 
 //		AES_cfb128_encrypt(indata, outdata, bytes_read, &key, ivec, &num, AES_DECRYPT);
 
@@ -167,7 +165,7 @@ uint8_t* keys_digest_request_decrypt(SSL *sslHandle, const char* kernel_filename
 		
 //		memcpy((decrypted_kernel + i), outdata, AES_BLOCK_SIZE);
 		memcpy((decrypted_kernel + i), indata, AES_BLOCK_SIZE);
-		if(memcmp(decrypted_kernel + i, indata, 16)) { printf("Error Copying"); } 
+		if(memcmp(decrypted_kernel + i, indata, 16)) { printf("Error Copying"); exit(1);} 
 		if (bytes_read < AES_BLOCK_SIZE)
 		    break;
 		if (bytes_read2 < AES_BLOCK_SIZE)
