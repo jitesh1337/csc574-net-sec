@@ -204,8 +204,9 @@ Three SELinux usertypes we need to know about are: {\tt user\_u, system\_u and u
 
 A management node on the cloud has a defined set of responsibilities and hence, known set of software running on it with known responsibilities. This makes it feasible to write \emph{strong} SELinux policies for it. Each server/daemon should be constrained to its own domain and given access to just the files it absolutely needs. This is not an unruly demand. Fedora already comes with a Targeted SELinux policy that has known servers (httpd, sshd, etc) appropriately confined. For example, httpd subjects and objects are labelled with the type {\tt httpd\_t}. 
 
-Writing a new policy from scratch for the Management node is a tough job. One needs to know a lot about the internal workings of a program to be able to write a policy for it. Consequently, a better approach is to start with a stock policy like Fedora's targeted policy and rip-off the potentially insecure parts.
+Writing a new policy from scratch for the Management node is a tough job. One needs to know a lot about the internal workings of a program to be able to write a policy for it. Consequently, a better approach is to start with a stock policy like Fedora's targeted policy and rip-off the potentially insecure parts. Thus, our focus on writing the SELinux policy is two fold: Remove the "unconfined" privileges of Linux root user and confine our secure launcher daemon. All other servers and daemons are assumed to be already properly confined for our purposes.
 
+\subsubsection{Part one: Remove unconfined privileges of root}
 The targeted policy maps each Linux user to the SELinux {\tt unconfined\_u} user. As we have seen above, such a mapping reduces the system to a DAC system. This gives the root user ultimate privileges. In order to confine root, it is necessary to remove the {\tt unconfined\_u} SELinux user totally from the system. This can be done by the following set of commands:\\ \\
 {\tt \# sudo semanage login -m -s "user\_u" -r s0 \_\_default\_\_}\\
 {\tt \# sudo semanage login -m -s "user\_u" -r s0 root} \\
@@ -213,15 +214,15 @@ The targeted policy maps each Linux user to the SELinux {\tt unconfined\_u} user
 
 The first command maps all the Linux usernames to {\tt user\_u} SELinux user. The second command maps the Linux root user to {\tt user\_u} SELinux user.  The third command removes the unconfined module. Removing the unconfined module greatly adds to the security. The Linux root user can now be confined and hence, damage control is possible.
 
-\subsubsection{Sandboxing the secure launcher daemon}
+\subsubsection{Part two: Sandboxing the secure launcher daemon}
 A new SELinux user is now defined for secure launcher daemon, say, {\tt secure\_u}. All the files needed by the daemon are marked with the type {\tt secure\_t}. Thus, only the secure daemon can access the files. No transition is allowed to or from {\tt secure\_t} type. This gives the appropriate sandboxing. 
 
-\subsubsection{Constraining the root user}
-Mapping the Linux root user to the SELinux {\tt user\_u} user already took off many of the privileges of the root user. Adding "PermitRootLogin=no" to the sshd config disallows root login over ssh. But, it would be truly wishful thinking to assume that a root login will never be needed. Upgrading the guest machine, Adding new software, Reconfiguration would be impossible without root. The trick then is to permit a transition to the unconfined domain ONLY if the user can prove physical access. Physical access means the process should have a tty. Adding the following line to the {\tt /etc/sudoers} will enable one to sudo to root user with unconfined access: \\
+\subsubsection{Unconfined privileges to root in limited cases}
+Mapping the Linux root user to the SELinux {\tt user\_u} user already took off many of the privileges of the root user. Adding "PermitRootLogin=no" to the sshd config disallows root login over ssh. But, it would be truly wishful thinking to assume that a root login will never be needed. Upgrading the guest machine, adding new software, reconfiguration would be impossible without root. The trick then is to permit a transition to the unconfined domain ONLY if the user can prove physical access. Physical access means the requesting process should have a tty. Adding the following line to the {\tt /etc/sudoers} will enable one to sudo to root user with unconfined access: \\
 
 {\tt root ALL=(ALL) TYPE=unconfined\_t ROLE=unconfined\_r ALL} \\
 
-A minor patch to "sudo" will check for the presence of tty (using a call to {\tt isatty()}) before granting the root access. 
+A minor patch to "sudo" will check for the presence of tty (a call to {\tt isatty()}) before granting the root access. 
 
 Since a remote attacker can never have a physical tty, he can never have an unconfined root access to the management node.
 
