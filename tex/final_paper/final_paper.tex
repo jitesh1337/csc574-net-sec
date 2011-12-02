@@ -97,7 +97,7 @@ Transport Layer Security or its predecessor Secure Socket Layer is a cryptograph
 
 We use SSL/TLS to mutually authenticate the cloud provider and the customer site. We also use encrypted communication to transfer sensitive data from customer site to the cloud side.
 
-\subsection{Misc}
+\subsection{Miscellaneous}
 This subsection will explain terminology used throughout the paper.
 We use the term \emph{Management node} to refer to a node in the cloud which is exposed to the outside world as well as the VM image store, which makes it vulnerable to attacks. The term \emph{Launcher} is used to denote the process which launches and provisions the guest image upon a trigger from another process (like the webserver. The webserver accepts launch requests from the customer and triggers the \emph{launcher}). 
 
@@ -106,9 +106,63 @@ We use the term \emph{Management node} to refer to a node in the cloud which is 
 
 \section{Approach}
 \label{sec:approach}
+As we saw in the last section, obtaining root access on the Management node can be catastrophic. It is never possible to claim with a 100\% guarantee that a particular software is free of bugs. Thus, putting in measures to check the damage in case of a compromise is as necessary as following secure coding practices. The next subsection attempts to summarize the salient points of the design. 
+
+\subsection{Design Choices}
+
+\subsubsection{Store keys on customer site}
+The fundamental premise of the project is to enable the customer to trust the cloud. Thus, we choose to store the data and kernel encryption/decryption keys on the customer site. The customer site reveals the keys only to a \emph{secure launcher daemon} on the cloud side, who can attest its state and authenticate via SSL. (Note: Workings of the \emph{secure launcher daemon} is discussed in the later section)
+
+\subsubsection{Integrity check the kernel}
+The kernel which the guest VM uses to boot should run unmodified. Any malicious alteration in the kernel can lead to leakage of data. Thus, the customer site stores an HMAC of the kernel alongwith the kernel decryption key. This, HMAC is passed along to the \emph{secure launcher daemon}. Only if this HMAC matches the one obtained from the kernel, is the kernel booted. Note that we also store the kernel encrypted on the cloud side (although one might argue that it isn't really necessary).
+
+\subsubsection{SSL private key a sealed by the TPM}
+To enable mutual authentication between the cloud provider and the customer site, they communicate via SSL. If an attacker has to pose as the cloud provider, he will need the SSL private key of the cloud provider. To avoid imposters, we seal the SSL private key in the TPM. This private key can now only be accessed if the TCB established and the \emph{secure launcher daemon} is unmodified.
+
+\subsubsection{TPM Authdata management}
+To perform a TPM seal/unseal operation, it is necessary for the requesting entity to show Authdata: an entry ticket into the TPM. Authdata can be as simple as passwords or a complex derivation of passwords. We let the cloud customer choose the Authdata type. The Authdata can either be entered manually on a terminal when launching a guest VM, can be passed on from the customer site with the launch request or can be stored in a file with very strict SELinux confinements. The most preferable and secure way is to enter it manually on the terminal (might not be the most practical). 
+\\
+
+Next we provide an overview of how the solution works.
+
+\begin{figure*}[htp]
+\centering
+\includegraphics[scale=0.50]{csc574-solution.jpg}
+\caption{\small \sl The architecture of the solution. The green parts denote trusted entities. Red denotes entities not in the TCB. The SSL private key is shown near the TPM block to signify that it is sealed in the TPM. The locked entities can only be unlocked by the trusted Secure Launcher Daemon. The guest VM resides on a different node. }
+\label{fig:solution}
+\end{figure*}
+\subsection{Initial Setup}
+For the success of this scheme, customer's participation is required in setting up the initial security of the system. In this section, we cover how the initial setup is done.
+
+The customer first sets up separate keys for encryption/decryption of the kernel and the data. The cloud provider either sends a copy of the kernel to be authenticated by the customer or the customer compiles his own copy. In the former case, the unencrypted kernel is sent via snail-mail on a harddrive with proper digital signature. The customer verifies the digital signature, creates an HMAC with his kernel signing key and encrypts the kernel. The encrypted kernel is then returned via snail-mail, again, with proper digital signature. The customer keeps the HMAC. The cloud provider installs this encrypted kernel on his side. Note that the snail-mail is only to provide a secure out-of-band communication mechanism.
+
+The customer then sets up an SSL-enabled server to serve the keys and the HMAC to properly authenticated cloud entity. 
+
+On the cloud side, the customer takes part in setting up the TCB. The customer can, optionally, provide a TPM. The TPM setup procedure is fully audited by the customer to ensure security (Core assumption is that the cloud provider is trusted and the setup procedure won't be botched. The audit is to make sure that the proper security policies are adhered to). The setup of the management node occurs behind closed doors with no access to the external world, so it is assumed that it cannot be compromised by an external entity.
+
+A proper hash of {BIOS, bootloader, kernel, secure launcher daemon} is extended in on the PCRs of the TPM. The SSL private key of the cloud used for authentication with the customer is then sealed off againt the said PCR. Proper SELinux policies are then put in place to sandbox the secure launcher daemon.
+
+The next section describes the operation of the setup.
+
+\subsection{Overview}
+The very first step to secure data in the cloud is to encrypt it. The cloud provider can provide facilities for encryption just before storing to the persistent storage at the cloud site. However, according to the end-to-end argument \cite{end-to-end}, if the cloud customer needs guarantees, the encryption has to be done at the application layer by the customer software. The customer may choose to have a full-disk encryption (encrypts the whole filesystem) \cite{disk-encryption, truecrypt} or a selective file-encryption \cite{nss}. In either method, for efficiency reasons, the encryption technique chosen would probably be some kind of symmetric encryption (like AES) and will need a key. 
+
+This key cannot be stored on the guest image in plaintext, since the attacker has access to the guest image from the management node and he can directly read it off the image. As describer above, the keys will be revealed only to a cloud process who can provide attestation (using TCB) and authenticate itself using SSL. Next we describe ways in which it will be impossible (or atleast hard) for an attacker to falsely pose to the customer as an attested cloud process.
+
+Now refer to Figure \ref{fig:solution} for an overview of the architecture.
+A TPM is used to establish a TCB, as we saw in the "Background" section. The TPM verifies the BIOS, bootloader and the kernel. Eventually, the kernel extends the hash of a \emph{secure launcher daemon} in the TPM and starts the daemon. The job of this daemon is to listen for requests to launch a VM. When a request is received, it unseals the SSL private key from the TPM. This unseal operation only works if neither of the BIOS, bootloader, kernel or secure launch daemon have been modified.
+
+After the SSL private key is unsealed, the daemon can authenticate to the customer site. Once the customer site authenticates the cloud provider, it releases the following objects: kernel decryption key, data decryption key and an HMAC of the kernel image.
+
+The \emph{secure launcher daemon} decrypts and verifies the integrity of the kernel. It then reads the actual launcher binary (usually a provisioning engine like xCAT \cite{xCAT}) into memory, calculates its hash and compares against the expected hash. If both the kernel and the launcher binary are verified, then the daemon forks of the launcher process which does the appropriate provisioning.
+
+The data decryption keys are passed on to the guest kernel via a shared page or as a provisioning parameter.
+
+Note that the \emph{secure launcher daemon} is confined using SELinux. The SELinux policy recommendations and how to sandbox the daemon is described in detail in a later section.
 
 \section{Experimental Evaluation}
 \label{sec:evaluation}
+
 
 \section{Related work}
 \label{sec:related}
