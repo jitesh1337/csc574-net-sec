@@ -13,8 +13,8 @@ int main(void)
   unsigned char ckey[] =  "thiskeyisverybad";
   unsigned char ivec[] = "dontusethisinput";
 
-  FILE *ifp = fopen("/home/ashdharan/linux-0.2.img", "r");
-  FILE *ofp = fopen("/home/ashdharan/encrypt_file", "w");
+  FILE *ifp = fopen("/home/jitesh/repos/ashwin/tests/vmlinuz-2.6.40.4-5.fc15.i686.PAE", "r");
+  FILE *ofp = fopen("/home/jitesh/repos/ashwin/tests/encrypted_kernel", "w");
   /* data structure that contains the key itself */
   AES_KEY key;
 
