@@ -2,7 +2,7 @@
 #define _client_h
 
 #define KEYFILE "/etc/pki/tls/certs/client.pem"
-#define PRIVATE_KEYFILE "/etc/pki/tls/certs/client.der.private"
+#define PRIVATE_KEYFILE "/etc/pki/tls/certs/client.der.private.enc"
 
 int tcp_connect(char *host, int port);
 void check_cert(SSL *ssl, char *host);

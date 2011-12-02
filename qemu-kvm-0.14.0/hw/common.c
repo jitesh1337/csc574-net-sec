@@ -31,7 +31,7 @@ static long get_file_size(FILE *f)
 	return size;
 }
 
-unsigned char * get_key(char *der_file, int *size)
+/* unsigned char * get_key(char *der_file, int *size)
 {
 
     X509 *crt = NULL;
@@ -48,7 +48,20 @@ unsigned char * get_key(char *der_file, int *size)
 	//printf("bytes_read: %d\n", bytes_read);
 
     return key;
+} */
+
+unsigned char *get_key(char *der_file, int *key_size)
+{
+	char *srk_passwd, *data;
+	int i;
+
+	srk_passwd = malloc(100);
+	strcpy(srk_passwd, "12345");
+
+	tpmUnsealFile(der_file, &data, key_size, FALSE, srk_passwd);
+	return data;
 }
+
 
 SSL_CTX* initialize_ctx(char *keyfile) {//, char *password) {
 	SSL_METHOD *ssl_method;
@@ -70,18 +83,19 @@ SSL_CTX* initialize_ctx(char *keyfile) {//, char *password) {
 	ctx = SSL_CTX_new(ssl_method);
 
 	/* Load our keys and certificates*/
-	if(!(SSL_CTX_use_certificate_chain_file(ctx, keyfile)))
+	if(SSL_CTX_use_certificate_chain_file(ctx, keyfile) != 1)
 		berr_exit("Can't read certificate file");
 
 	der_key = get_key(PRIVATE_KEYFILE, &size);
 	//pass = password;
 //	SSL_CTX_set_default_passwd_cb(ctx, password_cb);
-	if(!(SSL_CTX_use_PrivateKey_ASN1(EVP_PKEY_RSA, ctx, der_key, size)))
 	//if(!(SSL_CTX_use_PrivateKey_file(ctx, keyfile, SSL_FILETYPE_PEM)))
+	if(SSL_CTX_use_PrivateKey_ASN1(EVP_PKEY_RSA, ctx, der_key, size) != 1) {
 		berr_exit("Can't read key file");
+	}
 
 	/* Load the CAs we trust*/
-	if(!(SSL_CTX_load_verify_locations(ctx, CA_LIST, 0)))
+	if(SSL_CTX_load_verify_locations(ctx, CA_LIST, 0) != 1)
 		berr_exit("Can't read CA list");
 	
 	#if (OPENSSL_VERSION_NUMBER < 0x00905100L)
