@@ -14,7 +14,7 @@ static int response_server(SSL *sslHandle,  int socket_fd) {
 	BIO_push(io, ssl_bio);
 	
 //	int bytes_read;
-	FILE *ifp = fopen("/home/ashdharan/encrypt_decrypt/test_file", "r");
+	FILE *ifp = fopen("/home/jitesh/repos/ashwin/test_file", "r");
 
 	// Read exact number (16 bytes)
 	fread(buf, 1, 2*AES_BLOCK_SIZE+64, ifp);

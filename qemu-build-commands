@@ -1,3 +1,5 @@
 ./configure --target-list=x86_64-softmmu --prefix=/usr --sysconfdir=/etc --audio-drv-list=pa,sdl,alsa,oss --disable-strip --extra-ldflags=-Wl,--build-id '--extra-cflags=-O2 -g -pipe -Wall -Wp,-D_FORTIFY_SOURCE=2 -fexceptions -fstack-protector --param=ssp-buffer-size=4 -m32 -march=i686 -mtune=atom -fasynchronous-unwind-tables' --disable-xen
 
+./configure --target-list=x86_64-softmmu --prefix=/usr --sysconfdir=/etc --audio-drv-list=pa,sdl,alsa,oss --disable-strip --extra-ldflags=-Wl,--build-id '--extra-cflags=-O2 -g -pipe -Wall -Wp,-D_FORTIFY_SOURCE=2 -fexceptions -fstack-protector --param=ssp-buffer-size=4 -m32 -march=i686 -mtune=atom -fasynchronous-unwind-tables' --disable-xen --extra-ldflags="-L/usr/lib  -lssl -lcrypto"
+
 make V=1 -j2 VL_LDFLAGS=-Wl,--build-id
