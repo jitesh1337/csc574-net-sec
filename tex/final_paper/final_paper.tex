@@ -279,6 +279,13 @@ The attacker might try to start a malicious kernel on the same physical node tha
 Finally from the practical perspective, no security system can be perfect and we don't claim that ours is perfect either. Writing a SELinux policy is a complex task and prone to errors, hence, we have included as much fallback security as possible. Some core areas do need to be protected with SELinux without an option. Those are: disallow unconfined access, protect {\tt /dev/tpm} with {\tt secure\_t} label, label the secure launcher daemon the files it needs as {\tt secure\_t}. We believe that implementing the methods described above would raise the bar of security on the cloud significantly.
 
 \subsubsection{Performance overhead}
+The performance overhead is measured as the delay between arrival of a request to launch a customer VM and the actual booting of the VM. 
+
+Since we didn't have a real cloud environment installed, the delay for the normal case (i.e. just entering the launch command on the commandline) is zero seconds.
+
+After the complete implementation, the delay between the trigger and the actual boot on the VM is around 2 seconds. This time includes time for SSL connection, decryption of the kernel (4MB encrypted with AES in CBS using using a 128-bit key) and TPM unseal operation to unseal the private SSL key. 
+
+The caveat in the measurement is that SSL connection was done on a fast a ethernet connection (LAN) and a loopback interface. The real SSL latencies might be a bit higher. Also, the TPM operations were done with a TPM emulator which doesn't emulate the real TPM times. Real latencies can be calculated very easily with access to the real hardware. 
 
 \section{Related work}
 Owing to the trusted computing initiative we have seen increasing research in attestation systems \cite{springerlink:10.1007/s10207-011-0124-7} and their use in verification of application integrity. 
@@ -293,7 +300,11 @@ These and additional requirements of a trusted cloud platform have been well-sum
 
 \section{Conclusion}
 \label{sec:conclusion}
-Cloud providers must actively work towards providing a strong guarantee of a trusted computing base and verification abilities to the customers image.We have identified two major issues for distrust and slow adoption of cloud computing. Firstly, customer images are more often than not stored and booted by the cloud provider and secondly, the security of sensitive user data on the cloud is a concern. We have proposed and implemented a prototype based on a two prong approach that solves the problem with: Trusted boot with TPM based verification and Data encryption. We empower the customer to verify and establish trust with his own image that is stored and booted on the cloud. We acknowledge and verify the authenticity of an endpoint in the cloud after which we make all subsequent data and control communication through the use of a secure communication channel.  It assumes security features enabled to protect the virtual machine manager and booted guest OS's and does not deal with dynamic attacks at runtime. Our model successfully deflects any attempt by an attaker to subvert an established event flow. Finally these features are a necessary as confidence building measures if cloud providers wish to successfuly allay fears in the mind of users about security in the cloud.
+IaaS (Infrastructure as a Service) providers provide a low-cost outsourcing of infrastructure to the Cloud. However, to enable customers with business critical data to offload their data and computations to the cloud, the cloud provider must work with the customer to establish a strong Trust Computing Base which can protect the customer data in the face of compromise on the cloud provider side. To enable such a collaboration, we recognize the minimum components required for a Trusted Computing Base to be provided, in an auditable way, to the cloud customer. We also show how the customer, in partnership with the cloud provider, can build a secure system on top of this TCB. We recommend using SELinux to confine each server/daemon to its own domain. In the future, SELinux may be replaced by a reasonable Dynamic Integrity Attestation technique, which provides a stronger guarantee of secure computation.
+
+The performance overhead of such a system is a little extra time needed during launch of a VM. This time is typically close to about ~2s, but it will vary depending on the Round-Trip time between cloud provider and the customer's servers. Such an overhead during launch of a VM, which is a sufficiently non-frequent event, will be acceptable for the security benefits it provides. 
+
+Currently, due to lack of information in the public domain about the internals of popular IaaS providers, we had to base our design on NCSU's VCL system. This lack of information about real clouds, can be seen as a limitation of the project. But, we are confident that most of our concepts can be easily applied to most of the clouds.
 \nocite{*}
 \bibliography{references}{}
 \bibliographystyle{plain}

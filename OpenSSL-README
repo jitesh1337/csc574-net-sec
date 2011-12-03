@@ -1,0 +1,42 @@
+1. Create the private key and certificate for the CA
+> sudo openssl req -new -x509 -days 365 -newkey rsa:1024 -keyout /etc/pki/CA/private/cakey.pem -out /etc/pki/CA/cacert.pem -nodes
+
+2. If this is the first time ever you will be signing certificates
+> sudo touch /etc/pki/CA/index.txt
+> su -c "echo 01 > /etc/pki/CA/serial"
+
+3. Create a new private key and certificate for the client
+> openssl req -newkey rsa:1024 -nodes -keyout client.key -out client.req 
+
+4. Sign the client certificate
+> openssl ca -out clientcert.pem -infiles client.req 
+
+5. Create a new private key and certificate for the server
+> openssl req -newkey rsa:1024 -nodes -keyout server.key -out server.req 
+
+6. Sign the server certificate
+> openssl ca -out servercert.pem -infiles server.req
+
+sudo cat /etc/pki/CA/private/cakey.pem /etc/pki/CA/cacert.pem > root.pem
+cat server.key servercert.pem /etc/pki/CA/cacert.pem > server.pem
+cat client.key clientcert.pem /etc/pki/CA/cacert.pem > client.pem
+
+7. Separate the private certificate from client.pem and save it in
+client.pem.private. Convert PEM to DER format. Delete the
+client.pem.private.
+> openssl rsa -in client.pem.private -inform PEM -out client.der.private -outform DER
+
+8. Remove the private key part from client.pem, so that it now 
+has only two public certificates. 
+
+To create a digest and digitally sign it:-
+openssl dgst -sha1 -sign client.key -out linux.sha1 linux-0.2.img
+
+To extract the public key from the certificate:-
+openssl x509 -noout -in servercert.pem -pubkey > serverpublickey.pem
+
+To verify the signature of the object:-
+openssl dgst -sha1 -verify pubkey.pem -signature linux.sha1 linux-0.2.img
+
+
+openssl dgst -sha256 -hmac key linux-0.2.img

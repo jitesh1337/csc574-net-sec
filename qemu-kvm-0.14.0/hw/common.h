@@ -16,17 +16,19 @@
 
 #include <openssl/ssl.h>
 
-#define CA_LIST "root.pem"
+#define CA_LIST "/etc/pki/CA/root.pem"
 #define HOST	"localhost"
 #define RANDOM  "random.pem"
 #define PORT	4433
-#define BUFSIZZ 1024
+#define BUFSIZE 1024
+//Shared HMAC Key
+#define KEY "key"
 
 extern BIO *bio_err;
 int berr_exit (char *string);
 int err_exit(char *string);
 
-SSL_CTX *initialize_ctx(char *keyfile, char *password);
+SSL_CTX *initialize_ctx(char *keyfile);
 void destroy_ctx(SSL_CTX *ctx);
 
 #ifndef ALLOW_OLD_VERSIONS

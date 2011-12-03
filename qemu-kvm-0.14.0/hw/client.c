@@ -1,8 +1,6 @@
 #include "common.h"
 
-int tcp_connect(host,port)
-  char *host;
-  int port;
+int my_tcp_connect(char* host, int port)
   {
     struct hostent *hp;
     struct sockaddr_in addr;
@@ -28,9 +26,7 @@ int tcp_connect(host,port)
 
 /* Check that the common name matches the
    host name*/
-void check_cert(ssl,host)
-  SSL *ssl;
-  char *host;
+void check_cert(SSL* ssl, char* host)
   {
     X509 *peer;
     char peer_CN[256];

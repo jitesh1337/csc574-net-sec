@@ -1,7 +1,8 @@
 #include <stdio.h>
+#include <stdlib.h>
 #include <openssl/aes.h>
 
-int main(void)
+int main(int argc, char *argv[])
 {
   int bytes_read, bytes_written;
   unsigned char indata[AES_BLOCK_SIZE];
@@ -13,8 +14,23 @@ int main(void)
   unsigned char ckey[] =  "thiskeyisverybad";
   unsigned char ivec[] = "dontusethisinput";
 
-  FILE *ifp = fopen("/home/ashdharan/encrypt_file", "r");
-  FILE *ofp = fopen("/home/ashdharan/decrypt_file", "w");
+  if (argc <= 2) {
+	  printf("%s will atleast take two args: encrypted file and target decrypted file\n", argv[0]);
+	  exit(1);
+  }
+
+  FILE *ifp = fopen(argv[1], "r");
+  if (ifp == NULL) {
+	  fprintf(stderr, "Error: opening file %s to read\n", argv[1]);
+	  exit(1);
+  }
+
+  FILE *ofp = fopen(argv[2], "w");
+  if (ofp == NULL) {
+	  fprintf(stderr, "Error: opening %s to write\n", argv[2]);
+	  exit(1);
+  }
+
   /* data structure that contains the key itself */
   AES_KEY key;
 

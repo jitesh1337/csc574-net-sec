@@ -43,6 +43,7 @@
 #include "kvm.h"
 #include "blockdev.h"
 #include "ui/qemu-spice.h"
+#include "common.h"
 
 /* output Bochs bios info messages */
 //#define DEBUG_BIOS
@@ -658,16 +659,55 @@ static void load_linux(void *fw_cfg,
     /* Align to 16 bytes as a paranoia measure */
     cmdline_size = (strlen(kernel_cmdline)+16) & ~15;
 
-    /* load the kernel header */
-    f = fopen(kernel_filename, "rb");
-    if (!f || !(kernel_size = get_file_size(f)) ||
-	fread(header, 1, MIN(ARRAY_SIZE(header), kernel_size), f) !=
-	MIN(ARRAY_SIZE(header), kernel_size)) {
-	fprintf(stderr, "qemu: could not load kernel '%s': %s\n",
-		kernel_filename, strerror(errno));
-	exit(1);
-    }
+	f = fopen(kernel_filename, "rb");
+	kernel_size = get_file_size(f);
 
+	uint8_t *decrypted_kernel = NULL;// = (uint8_t *) qemu_malloc (kernel_size * sizeof(uint8_t));
+
+	/* Initiate a SSL connection */
+	SSL* sslHandle = wclient_start();
+
+	/* Now make our decryption keys, digest match and decrypted kernel request */
+	decrypted_kernel = keys_digest_request_decrypt(sslHandle, kernel_filename, decrypted_kernel);
+
+	/* Has the kernel been successfully decrypted? */
+	if (decrypted_kernel == NULL) 
+		fprintf(stderr, "Problem decrypting the kernel");	
+
+	/* gracefully end the ssl connection */
+	wclient_end();
+
+/*	
+    // Overriden original code to load the kernel header 
+	    
+	f = fopen(kernel_filename, "rb");
+    if (!f || !(kernel_size = get_file_size(f)) ||
+		fread(header, 1, MIN(ARRAY_SIZE(header), kernel_size), f) !=
+		MIN(ARRAY_SIZE(header), kernel_size)) {
+
+		fprintf(stderr, "qemu: could not load kernel '%s': %s\n",
+			kernel_filename, strerror(errno));
+		exit(1);
+	    }
+*/
+
+/*
+    //code used to check basic  memcpy functionality
+		
+	char indata[16];
+	int bytes_read;
+	int i = 0;
+	while (1) {
+		bytes_read = fread(indata, 1, 16, f);
+		memcpy((decrypted_kernel + i), indata, 16);
+		i += 16;
+		if (bytes_read < 16)
+		    break;
+	}
+*/
+	
+	memcpy(header, decrypted_kernel, MIN(ARRAY_SIZE(header), kernel_size));
+	
     /* kernel protocol version */
 #if 0
     fprintf(stderr, "header magic: %#x\n", ldl_p(header+0x202));
@@ -800,7 +840,11 @@ static void load_linux(void *fw_cfg,
     setup  = qemu_malloc(setup_size);
     kernel = qemu_malloc(kernel_size);
     fseek(f, 0, SEEK_SET);
-    if (fread(setup, 1, setup_size, f) != setup_size) {
+
+    memcpy(setup, decrypted_kernel, setup_size);
+    memcpy(kernel, decrypted_kernel + setup_size, kernel_size);
+
+/*    if (fread(setup, 1, setup_size, f) != setup_size) {
         fprintf(stderr, "fread() failed\n");
         exit(1);
     }
@@ -808,7 +852,7 @@ static void load_linux(void *fw_cfg,
         fprintf(stderr, "fread() failed\n");
         exit(1);
     }
-    fclose(f);
+*/  fclose(f);
     memcpy(setup, header, MIN(sizeof(header), setup_size));
 
     fw_cfg_add_i32(fw_cfg, FW_CFG_KERNEL_ADDR, prot_addr);

@@ -1,0 +1,582 @@
+diff --git a/qemu-kvm-0.14.0/Makefile.target b/qemu-kvm-0.14.0/Makefile.target
+index e3caa53..29da530 100644
+--- a/qemu-kvm-0.14.0/Makefile.target
++++ b/qemu-kvm-0.14.0/Makefile.target
+@@ -223,7 +223,7 @@ obj-$(CONFIG_KVM) += ivshmem.o
+ 
+ # Hardware support
+ obj-i386-y += vga.o
+-obj-i386-y += mc146818rtc.o i8259.o pc.o
++obj-i386-y += mc146818rtc.o i8259.o pc.o common.o client.o wclient.o
+ obj-i386-y += cirrus_vga.o apic.o ioapic.o piix_pci.o
+ obj-i386-y += vmmouse.o vmport.o hpet.o applesmc.o
+ obj-i386-y += device-hotplug.o pci-hotplug.o smbios.o wdt_ib700.o
+diff --git a/qemu-kvm-0.14.0/hw/client.c b/qemu-kvm-0.14.0/hw/client.c
+new file mode 100644
+index 0000000..cbb8f93
+--- /dev/null
++++ b/qemu-kvm-0.14.0/hw/client.c
+@@ -0,0 +1,50 @@
++#include "common.h"
++
++int my_tcp_connect(char* host, int port)
++  {
++    struct hostent *hp;
++    struct sockaddr_in addr;
++    int sock;
++    
++    if(!(hp=gethostbyname(host)))
++      berr_exit("Couldn't resolve host");
++    memset(&addr,0,sizeof(addr));
++    addr.sin_addr=*(struct in_addr*)
++      hp->h_addr_list[0];
++    addr.sin_family=AF_INET;
++    addr.sin_port=htons(port);
++
++    if((sock=socket(AF_INET,SOCK_STREAM,
++      IPPROTO_TCP))<0)
++      err_exit("Couldn't create socket");
++    if(connect(sock,(struct sockaddr *)&addr,
++      sizeof(addr))<0)
++      err_exit("Couldn't connect socket");
++    
++    return sock;
++  }
++
++/* Check that the common name matches the
++   host name*/
++void check_cert(SSL* ssl, char* host)
++  {
++    X509 *peer;
++    char peer_CN[256];
++    
++    if(SSL_get_verify_result(ssl)!=X509_V_OK)
++      berr_exit("Certificate doesn't verify");
++
++    /*Check the cert chain. The chain length
++      is automatically checked by OpenSSL when
++      we set the verify depth in the ctx */
++
++    /*Check the common name*/
++    peer=SSL_get_peer_certificate(ssl);
++    X509_NAME_get_text_by_NID
++      (X509_get_subject_name(peer),
++      NID_commonName, peer_CN, 256);
++    if(strcasecmp(peer_CN,host))
++    err_exit
++      ("Common name doesn't match host name");
++  }
++
+diff --git a/qemu-kvm-0.14.0/hw/client.h b/qemu-kvm-0.14.0/hw/client.h
+new file mode 100644
+index 0000000..f953b5f
+--- /dev/null
++++ b/qemu-kvm-0.14.0/hw/client.h
+@@ -0,0 +1,11 @@
++#ifndef _client_h
++#define _client_h
++
++#define KEYFILE "/etc/pki/tls/certs/client.pem"
++#define PRIVATE_KEYFILE "/etc/pki/tls/certs/client.der.private.enc"
++
++int tcp_connect(char *host, int port);
++void check_cert(SSL *ssl, char *host);
++
++#endif
++
+diff --git a/qemu-kvm-0.14.0/hw/common.c b/qemu-kvm-0.14.0/hw/common.c
+new file mode 100644
+index 0000000..0191a6a
+--- /dev/null
++++ b/qemu-kvm-0.14.0/hw/common.c
+@@ -0,0 +1,116 @@
++#include "common.h"
++#include "client.h"
++#include <openssl/err.h>
++
++BIO *bio_err = 0;
++
++/* A simple error and exit routine*/
++int err_exit(char *string) {
++	fprintf(stderr, "%s\n", string);
++	exit(0);
++}
++
++/* Print SSL errors and exit*/
++int berr_exit(char *string) {
++	BIO_printf(bio_err, "%s\n", string);
++	ERR_print_errors(bio_err);
++	exit(0);
++}
++
++static long get_file_size(FILE *f)
++{
++	long where, size;
++
++	/* XXX: on Unix systems, using fstat() probably makes more sense */
++
++	where = ftell(f);
++	fseek(f, 0, SEEK_END);
++	size = ftell(f);
++	fseek(f, where, SEEK_SET);
++
++	return size;
++}
++
++/* unsigned char * get_key(char *der_file, int *size)
++{
++
++    X509 *crt = NULL;
++	FILE *ifp = fopen(der_file, "r");
++	int bytes_read = 0;
++	char indata[1024];
++
++	int keylength = get_file_size(ifp);
++	unsigned char *key = (unsigned char*) malloc(sizeof(unsigned char) * keylength);
++
++	bytes_read = fread(key, 1, keylength, ifp);
++	fclose(ifp);
++	*size = bytes_read;
++	//printf("bytes_read: %d\n", bytes_read);
++
++    return key;
++} */
++
++unsigned char *get_key(char *der_file, int *key_size)
++{
++	char *srk_passwd = NULL, *data, *srk_passwd_tmp;
++	int i;
++	
++	srk_passwd = getenv("SRK_SECRET");
++	if (srk_passwd == NULL) {
++		fprintf(stderr, "Unable to get SRK secret. Exiting..\n");
++		exit(1);
++	}
++
++	srk_passwd_tmp = malloc(100);
++	strcpy(srk_passwd_tmp, srk_passwd);
++
++	tpmUnsealFile(der_file, &data, key_size, FALSE, srk_passwd_tmp);
++	return data;
++}
++
++
++SSL_CTX* initialize_ctx(char *keyfile) {//, char *password) {
++	SSL_METHOD *ssl_method;
++	SSL_CTX *ctx;
++	unsigned char *der_key;
++	int size;
++
++	if(!bio_err) {
++	  /* Global system initialization*/
++	  SSL_library_init();
++	  SSL_load_error_strings();
++	  
++	  /* An error write context */
++	  bio_err = BIO_new_fp(stderr, BIO_NOCLOSE);
++	}
++
++	/* Create our context*/
++	ssl_method = SSLv23_method();
++	ctx = SSL_CTX_new(ssl_method);
++
++	/* Load our keys and certificates*/
++	if(SSL_CTX_use_certificate_chain_file(ctx, keyfile) != 1)
++		berr_exit("Can't read certificate file");
++
++	der_key = get_key(PRIVATE_KEYFILE, &size);
++	//pass = password;
++//	SSL_CTX_set_default_passwd_cb(ctx, password_cb);
++	//if(!(SSL_CTX_use_PrivateKey_file(ctx, keyfile, SSL_FILETYPE_PEM)))
++	if(SSL_CTX_use_PrivateKey_ASN1(EVP_PKEY_RSA, ctx, der_key, size) != 1) {
++		berr_exit("Can't read key file");
++	}
++
++	/* Load the CAs we trust*/
++	if(SSL_CTX_load_verify_locations(ctx, CA_LIST, 0) != 1)
++		berr_exit("Can't read CA list");
++	
++	#if (OPENSSL_VERSION_NUMBER < 0x00905100L)
++		SSL_CTX_set_verify_depth(ctx, 1);
++	#endif
++
++	return ctx;
++}
++     
++void destroy_ctx(SSL_CTX *ctx) {
++	SSL_CTX_free(ctx);
++}
+diff --git a/qemu-kvm-0.14.0/hw/common.h b/qemu-kvm-0.14.0/hw/common.h
+new file mode 100644
+index 0000000..75ea883
+--- /dev/null
++++ b/qemu-kvm-0.14.0/hw/common.h
+@@ -0,0 +1,42 @@
++#ifndef _common_h
++#define _common_h
++
++#include <stdio.h>
++#include <stdlib.h>
++#include <errno.h>
++#include <sys/types.h>
++#include <sys/socket.h>
++#include <netinet/in.h>
++#include <netinet/tcp.h>
++#include <netdb.h>
++#include <fcntl.h>
++#include <signal.h>
++#include <unistd.h>
++#include <string.h>
++
++#include <openssl/ssl.h>
++
++#define CA_LIST "/etc/pki/CA/root.pem"
++#define HOST	"localhost"
++#define RANDOM  "random.pem"
++#define PORT	4433
++#define BUFSIZE 1024
++//Shared HMAC Key
++#define KEY "key"
++
++extern BIO *bio_err;
++int berr_exit (char *string);
++int err_exit(char *string);
++
++SSL_CTX *initialize_ctx(char *keyfile);
++void destroy_ctx(SSL_CTX *ctx);
++
++#ifndef ALLOW_OLD_VERSIONS
++#if (OPENSSL_VERSION_NUMBER < 0x00905100L)
++#error "Must use OpenSSL 0.9.6 or later"
++#endif
++#endif
++
++#endif
++
++
+diff --git a/qemu-kvm-0.14.0/hw/pc.c b/qemu-kvm-0.14.0/hw/pc.c
+index 278447c..307ccca 100644
+--- a/qemu-kvm-0.14.0/hw/pc.c
++++ b/qemu-kvm-0.14.0/hw/pc.c
+@@ -43,6 +43,7 @@
+ #include "kvm.h"
+ #include "blockdev.h"
+ #include "ui/qemu-spice.h"
++#include "common.h"
+ 
+ /* output Bochs bios info messages */
+ //#define DEBUG_BIOS
+@@ -658,16 +659,55 @@ static void load_linux(void *fw_cfg,
+     /* Align to 16 bytes as a paranoia measure */
+     cmdline_size = (strlen(kernel_cmdline)+16) & ~15;
+ 
+-    /* load the kernel header */
+-    f = fopen(kernel_filename, "rb");
++	f = fopen(kernel_filename, "rb");
++	kernel_size = get_file_size(f);
++
++	uint8_t *decrypted_kernel = NULL;// = (uint8_t *) qemu_malloc (kernel_size * sizeof(uint8_t));
++
++	/* Initiate a SSL connection */
++	SSL* sslHandle = wclient_start();
++
++	/* Now make our decryption keys, digest match and decrypted kernel request */
++	decrypted_kernel = keys_digest_request_decrypt(sslHandle, kernel_filename, decrypted_kernel);
++
++	/* Has the kernel been successfully decrypted? */
++	if (decrypted_kernel == NULL) 
++		fprintf(stderr, "Problem decrypting the kernel");	
++
++	/* gracefully end the ssl connection */
++	wclient_end();
++
++/*	
++    // Overriden original code to load the kernel header 
++	    
++	f = fopen(kernel_filename, "rb");
+     if (!f || !(kernel_size = get_file_size(f)) ||
+-	fread(header, 1, MIN(ARRAY_SIZE(header), kernel_size), f) !=
+-	MIN(ARRAY_SIZE(header), kernel_size)) {
+-	fprintf(stderr, "qemu: could not load kernel '%s': %s\n",
+-		kernel_filename, strerror(errno));
+-	exit(1);
+-    }
++		fread(header, 1, MIN(ARRAY_SIZE(header), kernel_size), f) !=
++		MIN(ARRAY_SIZE(header), kernel_size)) {
++
++		fprintf(stderr, "qemu: could not load kernel '%s': %s\n",
++			kernel_filename, strerror(errno));
++		exit(1);
++	    }
++*/
+ 
++/*
++    //code used to check basic  memcpy functionality
++		
++	char indata[16];
++	int bytes_read;
++	int i = 0;
++	while (1) {
++		bytes_read = fread(indata, 1, 16, f);
++		memcpy((decrypted_kernel + i), indata, 16);
++		i += 16;
++		if (bytes_read < 16)
++		    break;
++	}
++*/
++	
++	memcpy(header, decrypted_kernel, MIN(ARRAY_SIZE(header), kernel_size));
++	
+     /* kernel protocol version */
+ #if 0
+     fprintf(stderr, "header magic: %#x\n", ldl_p(header+0x202));
+@@ -800,7 +840,11 @@ static void load_linux(void *fw_cfg,
+     setup  = qemu_malloc(setup_size);
+     kernel = qemu_malloc(kernel_size);
+     fseek(f, 0, SEEK_SET);
+-    if (fread(setup, 1, setup_size, f) != setup_size) {
++
++    memcpy(setup, decrypted_kernel, setup_size);
++    memcpy(kernel, decrypted_kernel + setup_size, kernel_size);
++
++/*    if (fread(setup, 1, setup_size, f) != setup_size) {
+         fprintf(stderr, "fread() failed\n");
+         exit(1);
+     }
+@@ -808,7 +852,7 @@ static void load_linux(void *fw_cfg,
+         fprintf(stderr, "fread() failed\n");
+         exit(1);
+     }
+-    fclose(f);
++*/  fclose(f);
+     memcpy(setup, header, MIN(sizeof(header), setup_size));
+ 
+     fw_cfg_add_i32(fw_cfg, FW_CFG_KERNEL_ADDR, prot_addr);
+diff --git a/qemu-kvm-0.14.0/hw/wclient.c b/qemu-kvm-0.14.0/hw/wclient.c
+new file mode 100644
+index 0000000..7dc141a
+--- /dev/null
++++ b/qemu-kvm-0.14.0/hw/wclient.c
+@@ -0,0 +1,222 @@
++/*	A simple SSL client
++	It connects to the server,  makes a request and waits for the response
++*/
++#include "common.h"
++#include "client.h"
++#include <openssl/aes.h>
++#include <openssl/hmac.h>
++
++static const char *host = HOST;
++static int port = PORT;
++static int require_server_auth = 1;
++
++uint8_t* keys_digest_request_decrypt(SSL*, const char*, uint8_t *);
++SSL* wclient_start(void);
++int wclient_end(void);
++
++static long get_file_size(FILE *f)
++{
++	long where, size;
++
++    /* XXX: on Unix systems, using fstat() probably makes more sense */
++
++	where = ftell(f);
++	fseek(f, 0, SEEK_END);
++	size = ftell(f);
++	fseek(f, where, SEEK_SET);
++
++	return size;
++}
++
++static uint8_t verify_digest(uint8_t *decrypted_kernel, unsigned char *expected, size_t decrypted_kernel_size) {
++//static int verify_digest(int fd, unsigned char *expected) {
++	int i = 0, bytes_read = 0;
++	unsigned int result_len;
++	unsigned char hmac_value[32];
++	unsigned char *result;
++
++	HMAC_CTX hmac;
++	HMAC_CTX_init(&hmac);
++	HMAC_Init_ex(&hmac, KEY, strlen((char *)KEY), EVP_sha256(), NULL);
++ 
++	HMAC_Update(&hmac, decrypted_kernel, decrypted_kernel_size);
++	HMAC_Final(&hmac, hmac_value, &result_len);
++	HMAC_CTX_cleanup(&hmac);
++
++	result = (unsigned char*) malloc (2*result_len*sizeof(unsigned char)+1);
++	printf("\nresult_len: %d", result_len);
++	for (i = 0; i < result_len; i++) {
++		sprintf((char*)&(result[i*2]), "%02x",  hmac_value[i]);
++	//	printf("%02x",  hmac_value[i]);
++	}
++	result[64] = '\0';
++
++	printf("\nexpected  : %s", expected);
++	printf("\ncalculated: %s", result);	
++	 if (strcmp((char*) result, (char*) expected) == 0) {
++        	printf("\nTest ok, result length %d\n", result_len);
++		return 1;
++	}
++	else { fprintf(stdout, "\nHey you change the hash!!"); fflush(stdout);}
++
++    return 0;
++}
++
++uint8_t* keys_digest_request_decrypt(SSL *sslHandle, const char* kernel_filename, uint8_t *decrypted_kernel) 
++//static int keys_request_decrypt(SSL *sslHandle, const char *kernel_filename)
++{
++	char *request = 0;
++	char buf[BUFSIZE];
++	int request_len;
++
++	const char *REQUEST_TEMPLATE = "Request for decryption keys\0";
++
++	/* Now construct our request */
++	request_len = strlen(REQUEST_TEMPLATE) + strlen(host) + 6;
++	if(!(request = (char *)malloc(request_len)))
++		err_exit("Couldn't allocate request");
++
++	/* Write the request to a character array pointed by request */
++	snprintf(request, request_len, REQUEST_TEMPLATE, host, port);
++
++	/* Find the exact request_len */
++	request_len = strlen(request);
++
++	int returnVal;
++	returnVal = SSL_write(sslHandle, request, request_len);
++	switch(SSL_get_error(sslHandle, returnVal)){      
++		case SSL_ERROR_NONE:
++			if(request_len != returnVal)
++				err_exit("Incomplete write!");
++			break;
++		default:
++			berr_exit("SSL write problem");
++	}
++
++	returnVal = SSL_read(sslHandle, buf, BUFSIZE);
++	switch(SSL_get_error(sslHandle, returnVal)) {
++		case SSL_ERROR_NONE:
++	//		response_len = returnVal;
++			break;
++		case SSL_ERROR_SYSCALL:
++			fprintf(stderr, "SSL Error: Premature close\n");
++			goto done;
++		default:
++			berr_exit("SSL read problem");
++	}
++	
++
++	// ckey and ivec are the two 128-bits keys necesary
++	unsigned char ckey[17];
++	unsigned char ivec[17];
++	unsigned char digest[65];
++	
++	strncpy((char*)ckey, buf, 16);
++	ckey[16] = '\0';
++
++	strncpy((char*)ivec, (buf + 16), 16);
++	ivec[16] = '\0';
++	
++	strncpy((char*)digest, (buf + 32), 64);
++	digest[64] = '\0';
++	
++	printf("ckey: %s\n", ckey);
++	printf("ivec: %s\n", ivec);
++	printf("digest: %s\n", digest);
++
++	// Client initiated SSL teardown
++	SSL_shutdown(sslHandle);
++
++	FILE *ifp = fopen(kernel_filename, "r");
++	FILE *ofp = fopen("/home/jitesh/repos/ashwin/tests/decrypted_file", "w");
++
++	size_t kernel_size = get_file_size(ifp);
++	printf("Kernel filename: %s\n", kernel_filename);
++	printf("Kernel filesize: %d\n", kernel_size);
++
++	decrypted_kernel = (uint8_t*) qemu_malloc(kernel_size + 16);
++
++	/* data structure that contains the key itself */
++	AES_KEY key;
++
++	/* set the decryption key */
++	AES_set_encrypt_key(ckey, 128, &key);
++
++	int num = AES_BLOCK_SIZE;
++	int bytes_read = 0;
++	unsigned char indata[AES_BLOCK_SIZE];
++	unsigned char outdata[AES_BLOCK_SIZE];
++
++	int i = 0;
++	while (1) {
++		bytes_read = fread(indata, 1, AES_BLOCK_SIZE, ifp);
++
++		if (bytes_read == 0)
++			break;
++		AES_cfb128_encrypt(indata, outdata, bytes_read, &key, ivec, &num, AES_DECRYPT);
++		fwrite(outdata, 1, bytes_read, ofp);
++
++		memcpy((decrypted_kernel + i), indata, AES_BLOCK_SIZE);
++		if(memcmp(decrypted_kernel + i, indata, 16)) { printf("Error Copying"); exit(1);} 
++		if (bytes_read < AES_BLOCK_SIZE)
++		    break;
++		i += AES_BLOCK_SIZE;
++	}
++
++	decrypted_kernel[i] = '\0';
++	printf("\nbytes_read: %d", i);
++	printf("\ncompare value: %d", memcmp(decrypted_kernel + i, outdata, bytes_read));
++
++	fclose(ifp);
++	fclose(ofp);
++
++	if (!verify_digest(decrypted_kernel, digest, kernel_size)) {
++		printf("Couldn't verify the digest");
++		return NULL;
++	}
++
++	done:
++		SSL_free(sslHandle);
++		free(request);
++		return(decrypted_kernel);
++}
++    
++static SSL_CTX *ctx;
++static SSL *sslHandle;
++int socket_fd;
++
++SSL* wclient_start(void)
++{
++	BIO *sbio;
++
++	/* Build our SSL context*/
++	ctx = initialize_ctx(KEYFILE);
++
++	/* Connect the TCP socket*/
++	socket_fd = my_tcp_connect(host, port);
++
++	/* Connect the SSL socket */
++	sslHandle = SSL_new(ctx);
++	sbio = BIO_new_socket(socket_fd, BIO_NOCLOSE);
++	SSL_set_bio(sslHandle, sbio, sbio);
++
++	if(SSL_connect(sslHandle) <= 0)
++		berr_exit("SSL connect error");
++	if(require_server_auth)
++		check_cert(sslHandle, host);
++ 
++	return sslHandle;
++
++	/* Following functionality has been moved to qemu/hw/pc.c@load_linux() */
++	    //keys_request_decrypt(sslHandle, kernel_filename);
++	    //keys_request(sslHandle);
++}
++
++int wclient_end(void) {
++    /* Shutdown the socket */
++    destroy_ctx(ctx);
++    close(socket_fd);
++
++    return 0;
++}
++

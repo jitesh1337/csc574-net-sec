@@ -1,0 +1,1 @@
+-kernel tests/vmlinuz-2.6.40.4-5.fc15.i686.PAE.enc -initrd tests/initramfs-2.6.40.4-5.fc15.i686.PAE.img;12345

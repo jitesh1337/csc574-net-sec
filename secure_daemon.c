@@ -17,7 +17,7 @@
 #define	MAX_ARGS	128
 #define LAUNCHER	"/usr/bin/qemu-system-x86_64"	
 
-unsigned char original_launcher_sha1[] = {0x27, 0x9b, 0xd7, 0xaa, 0x13, 0xaf, 0x12, 0x38, 0x11, 0x26, 0xc9, 0xec, 0x76, 0x4c, 0x1a, 0xb0, 0x50, 0xe0, 0x27, 0x6c};
+unsigned char original_launcher_sha1[] = {0x76, 0xf8, 0x7a, 0x94, 0xd2, 0xe8, 0xd2, 0xb4, 0xb6, 0x94, 0xf2, 0x73, 0x18, 0xab, 0x81, 0x8e, 0x0c, 0x8f, 0x9e, 0x99};
 
 /* Get filename, return its hash. Use openssl's SHA1
  */
@@ -67,6 +67,7 @@ int main(void)
 	unsigned char sha1[20];
 	char *args, *secret;
 	char *qemu_argv[MAX_ARGS];
+	extern char **environ;
 	pid_t pid;
 
 	if ((sock = socket(AF_UNIX, SOCK_STREAM, 0)) == -1) {
@@ -119,7 +120,8 @@ int main(void)
 
 		split_args(LAUNCHER, args, qemu_argv);
 		pid = fork();
-		if (pid == 0) { /* child */
+		if (pid == 0) { /* child */	
+			setenv("SRK_SECRET", secret, 1);
 			execv(LAUNCHER, qemu_argv);
 			/* Won't reach here */
 		} else {
@@ -130,7 +132,7 @@ int main(void)
 			}
 			/* If reached here, then launcher binary has been maliciously
 			 * modified. Kill the child */
-			//kill(pid, SIGKILL);
+			kill(pid, SIGKILL);
 			continue;
 		}
 
