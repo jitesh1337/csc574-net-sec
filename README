@@ -8,6 +8,12 @@ SETUP
 3) Apply provided patch to tpm-tools (tpm-tools-jit-ash.patch) and recompile
    tpm-tools. Install the new version.
 4) Install OpenSSL, if not already installed.
+5) The sources for the modified qemu-kvm are given with the tarball. The qemu-kvm
+   sources are picked up from the Fedora trunk and *not* the upstream sources. 
+   qemu.patch shows the changes we made to the qemu-kvm.
+6) Type make it in the root directory. It makes three binaries: kernel_part, 
+   secure_launcher, trigger_emulator. Following sections explain how to
+   use each binary.
 
 
 TPM SETUP
