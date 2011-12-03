@@ -10,8 +10,9 @@ SETUP
 4) Install OpenSSL, if not already installed.
 5) The sources for the modified qemu-kvm are given with the tarball. The qemu-kvm
    sources are picked up from the Fedora trunk and *not* the upstream sources. 
-   qemu.patch shows the changes we made to the qemu-kvm.
-6) Type make it in the root directory. It makes three binaries: kernel_part, 
+   qemu.patch shows the changes we made to the qemu-kvm. The qemu-build-commands 
+   file has instructions on how to build the qemu source.
+6) Type make in the root directory. It makes three binaries: kernel_part, 
    secure_launcher, trigger_emulator. Following sections explain how to
    use each binary.
 
@@ -28,7 +29,7 @@ Confirm password:
 
 Enter owner and SRK passwords.
 
-2) Run kernel_part.c so that PCR#16 has the appropriate hash
+2) Run kernel_part so that PCR#16 has the appropriate hash
 
 3) Seal the SSL private key
 # tpm_sealdata -i client.der.private -o client.der.private.enc -p 16
