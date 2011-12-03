@@ -128,8 +128,7 @@ uint8_t* keys_digest_request_decrypt(SSL *sslHandle, const char* kernel_filename
 	SSL_shutdown(sslHandle);
 
 	FILE *ifp = fopen(kernel_filename, "r");
-	FILE *ofp1 = fopen("/home/jitesh/repos/ashwin/tests/decrypted_file", "w");
-	FILE *ofp = fopen("/home/jitesh/repos/ashwin/tests/decrypted_kernel", "r");
+	FILE *ofp = fopen("/home/jitesh/repos/ashwin/tests/decrypted_file", "w");
 
 	size_t kernel_size = get_file_size(ifp);
 	printf("Kernel filename: %s\n", kernel_filename);
@@ -144,32 +143,23 @@ uint8_t* keys_digest_request_decrypt(SSL *sslHandle, const char* kernel_filename
 	AES_set_encrypt_key(ckey, 128, &key);
 
 	int num = AES_BLOCK_SIZE;
-	int bytes_read = 0, bytes_read2 = 0;
+	int bytes_read = 0;
 	unsigned char indata[AES_BLOCK_SIZE];
 	unsigned char outdata[AES_BLOCK_SIZE];
-	unsigned char tempdata[AES_BLOCK_SIZE];
 
 	int i = 0;
 	while (1) {
-		bytes_read = fread(indata, 1, AES_BLOCK_SIZE, ofp);
+		bytes_read = fread(indata, 1, AES_BLOCK_SIZE, ifp);
 
-		bytes_read2 = fread(tempdata, 1, AES_BLOCK_SIZE, ifp);
-		if (bytes_read == 0 || bytes_read2 == 0)
+		if (bytes_read == 0)
 			break;
-		AES_cfb128_encrypt(tempdata, outdata, bytes_read, &key, ivec, &num, AES_DECRYPT);
-		fwrite(outdata, 1, bytes_read2, ofp1);
+		AES_cfb128_encrypt(indata, outdata, bytes_read, &key, ivec, &num, AES_DECRYPT);
+		fwrite(outdata, 1, bytes_read, ofp);
 
-//		AES_cfb128_encrypt(indata, outdata, bytes_read, &key, ivec, &num, AES_DECRYPT);
-
-//		fwrite(outdata, 1, bytes_read, ofp);
-		
-//		memcpy((decrypted_kernel + i), outdata, AES_BLOCK_SIZE);
 		memcpy((decrypted_kernel + i), indata, AES_BLOCK_SIZE);
 		if(memcmp(decrypted_kernel + i, indata, 16)) { printf("Error Copying"); exit(1);} 
 		if (bytes_read < AES_BLOCK_SIZE)
 		    break;
-		if (bytes_read2 < AES_BLOCK_SIZE)
-			break;
 		i += AES_BLOCK_SIZE;
 	}
 
@@ -179,7 +169,6 @@ uint8_t* keys_digest_request_decrypt(SSL *sslHandle, const char* kernel_filename
 
 	fclose(ifp);
 	fclose(ofp);
-	fclose(ofp1);
 
 	if (!verify_digest(decrypted_kernel, digest, kernel_size)) {
 		printf("Couldn't verify the digest");
