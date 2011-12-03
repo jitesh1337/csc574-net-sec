@@ -1,4 +1,16 @@
-TPM STEPS
+Title: Enabling Cloud Customers to Trust the Cloud
+Authors: Jitesh Shah <jhshah@ncsu.edu> and Ashwin Shashidharan <ashashi3@ncsu.edu>
+
+SETUP
+-----
+1) Install tpm-emulator from http://tpm-emulator.berlios.de/documentation.html
+2) Install tpm-tools and TrouSerS (required for talking to the TPM)
+3) Apply provided patch to tpm-tools (tpm-tools-jit-ash.patch) and recompile
+   tpm-tools. Install the new version.
+4) Install OpenSSL, if not already installed.
+
+
+TPM SETUP
 ---------
 1) Take the ownership of the TPM
 
@@ -10,33 +22,45 @@ Confirm password:
 
 Enter owner and SRK passwords.
 
-2) Seal the data
+2) Run kernel_part.c so that PCR#16 has the appropriate hash
 
-# tpm_sealdata -i client.pem -o client.pem.enc -p 16
+3) Seal the SSL private key
+# tpm_sealdata -i client.der.private -o client.der.private.enc -p 16
+"client.der.private" is the private portion of the client key.
+Refer to OpenSSL-README for instructions on how to create the 
+appropriate keys and certificates.
 
+Copy client.der.private.enc to /etc/pki/tls/certs. Copy client.pem
+to the same location. SSL connection won't work without these
+certificates.
 
-1) encrypt/decrypt work fine
-2) the examples for openssl works if you generate proper keys
-3) The SSL Certificates file has the readme how to create certificates
+EXECUTION
+---------
+1) Go to customer_server directory. Compile the server sources using "make".
+A binary called "customer_server" will be created. This binary is supposed
+to run at the customer site. It reads from a file "in_param" which has
+the key for decryption, Initialisation vector and HMAC of the kernel.
 
+Run it as
+# ./customer_server
+No parameters are necessary. It starts listening on port 4433.
 
-Method:
-1. Create the private key and certificate for the CA
-> sudo openssl req -new -x509 -days 365 -newkey rsa:1024 -keyout /etc/pki/CA/private/cakey.pem -out /etc/pki/CA/cacert.pem -nodes
+2) Launch the secure launcher daemon (Where real TPM is present, it will
+be forked from the last stages of the kernel. Since, we use an emulator
+it has to manually called). The Daemon will listen on a UNIX socket for
+requests.
 
-2. If this is the first time ever you will be signing certificates
-> sudo touch /etc/pki/CA/index.txt
-> su -c "echo 01 > /etc/pki/CA/serial"
+3) Finally, launch the trigger emulator. It requires a connection string
+from stdin. A sample connection string has been provided in the file
+"connection_str". The string after ";" is the TPM SRK password. 
 
-3. Create a new private key and certificate for the client
-> openssl req -newkey rsa:1024 -nodes -keyout client.key -out client.req 
+4) Now, the secure daemon should unlock the SSL private key from the
+encrypted version stored above, fetch the keys and HMAC from the
+customer_server and decrypt and check the kernel. If all checks pass,
+a qemu process will be forked.
 
-4. Sign the client certificate
-> openssl ca -out client.pem -infiles client.req 
-
-5. Create a new private key and certificate for the server
-> openssl req -newkey rsa:1024 -nodes -keyout server.key -out server.req 
-
-6. Sign the client certificate
-> openssl ca -out server.pem -infiles server.req
+NOTE
+----
+Use the encrypt and decrypt utilities provided in the "utils" directory
+to encrypt and decrypt the kernel. 
 
