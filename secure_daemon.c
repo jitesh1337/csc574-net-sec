@@ -67,6 +67,7 @@ int main(void)
 	unsigned char sha1[20];
 	char *args, *secret;
 	char *qemu_argv[MAX_ARGS];
+	extern char **environ;
 	pid_t pid;
 
 	if ((sock = socket(AF_UNIX, SOCK_STREAM, 0)) == -1) {
@@ -119,7 +120,8 @@ int main(void)
 
 		split_args(LAUNCHER, args, qemu_argv);
 		pid = fork();
-		if (pid == 0) { /* child */
+		if (pid == 0) { /* child */	
+			setenv("SRK_SECRET", secret, 1);
 			execv(LAUNCHER, qemu_argv);
 			/* Won't reach here */
 		} else {

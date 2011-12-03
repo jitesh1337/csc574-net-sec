@@ -52,13 +52,19 @@ static long get_file_size(FILE *f)
 
 unsigned char *get_key(char *der_file, int *key_size)
 {
-	char *srk_passwd, *data;
+	char *srk_passwd = NULL, *data, *srk_passwd_tmp;
 	int i;
+	
+	srk_passwd = getenv("SRK_SECRET");
+	if (srk_passwd == NULL) {
+		fprintf(stderr, "Unable to get SRK secret. Exiting..\n");
+		exit(1);
+	}
 
-	srk_passwd = malloc(100);
-	strcpy(srk_passwd, "12345");
+	srk_passwd_tmp = malloc(100);
+	strcpy(srk_passwd_tmp, srk_passwd);
 
-	tpmUnsealFile(der_file, &data, key_size, FALSE, srk_passwd);
+	tpmUnsealFile(der_file, &data, key_size, FALSE, srk_passwd_tmp);
 	return data;
 }
 
